@@ -1,0 +1,734 @@
+Third-party code in Qt 6.8.3
+
+The Qt 6.8.3 modules that RotorLab GC ships (Windows and Android) contain
+the third-party code below. This list is generated from the SPDX software
+bills of materials that The Qt Company ships with Qt 6.8.3 (the sbom
+folder of each Qt kit). Test-only code, build-time tools and code for
+platforms GC is not built for are left out. Standard license texts are
+in the licenses/ folder (file name = SPDX id); license texts that have no
+SPDX id are in the LicenseRef-*.txt files next to this one.
+See also https://doc.qt.io/qt-6.8/licenses-used-in-qt.html.
+
+------------------------------------------------------------------------------
+_Clip2Tri unknown
+  Used in Qt module(s): qtpositioning
+  License: MIT
+  Source: https://github.com/raptor/clip2tri
+  Copyright:
+    Copyright (c) 2014 Bitfighter developers
+------------------------------------------------------------------------------
+_Clipper 6.4.2
+  Used in Qt module(s): qtpositioning
+  License: BSL-1.0
+  Source: https://sourceforge.net/projects/polyclipping/
+  Copyright:
+    Copyright Angus Johnson 2010-2017
+------------------------------------------------------------------------------
+_Poly2Tri commit a922022da4c0d3a55b1d6b6d634219caea653053
+  Used in Qt module(s): qtpositioning
+  License: BSD-3-Clause
+  Source: https://github.com/greenm01/poly2tri
+  Copyright:
+    Poly2Tri Copyright (c) 2009-2010, Poly2Tri Contributors
+------------------------------------------------------------------------------
+aglfn 1.7
+  Used in Qt module(s): qtbase
+  License: BSD-3-Clause
+  Source: https://github.com/adobe-type-tools/agl-aglfn
+  Copyright:
+    Copyright 2002, 2003, 2005, 2006, 2008, 2010, 2015 Adobe Systems
+------------------------------------------------------------------------------
+android-compass unknown
+  Used in Qt module(s): qtsensors
+  License: Apache-2.0
+  Copyright:
+    Copyright (C) 2008 The Android Open Source Project
+------------------------------------------------------------------------------
+assimp 5.4.3
+  Used in Qt module(s): qtquick3d
+  License: BSD-3-Clause
+  Source: https://github.com/assimp/assimp/releases/tag/v5.4.3
+  Copyright:
+    Copyright (c) 2006-2024, assimp team
+------------------------------------------------------------------------------
+blake2 ed1974ea83433eba7b2d95c5dcd9ac33cb847913
+  Used in Qt module(s): qtbase
+  License: CC0-1.0 OR Apache-2.0
+  Source: https://github.com/BLAKE2/BLAKE2/tree/ed1974ea83433eba7b2d95c5dcd9ac33cb847913
+  Copyright:
+    Copyright 2012, Samuel Neves <sneves@dei.uc.pt>
+------------------------------------------------------------------------------
+d3d12memoryallocator f128d39b7a95b4235bd228d231646278dc6c24b2
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/GPUOpen-LibrariesAndSDKs/D3D12MemoryAllocator
+  Copyright:
+    Copyright (c) 2019-2022 Advanced Micro Devices, Inc. All rights reserved.
+------------------------------------------------------------------------------
+doubleconversion 3.3.0
+  Used in Qt module(s): qtbase
+  License: BSD-3-Clause
+  Source: https://github.com/google/double-conversion/releases/tag/v3.3.0
+  Copyright:
+    Copyright 2006-2012, the V8 project authors
+------------------------------------------------------------------------------
+easing unknown
+  Used in Qt module(s): qtbase
+  License: BSD-3-Clause
+  Source: http://robertpenner.com/easing/
+  Copyright:
+    Copyright (c) 2001 Robert Penner
+------------------------------------------------------------------------------
+eigen 3.4.0
+  Used in Qt module(s): qtmultimedia
+  License: MPL-2.0 AND BSD-3-Clause
+  Source: https://gitlab.com/libeigen/eigen/-/archive/3.4.0/eigen-3.4.0.tar.bz2
+  Copyright:
+    Copyright (c) 2012 Alexey Korepanov <kaikaikai@yandex.ru>
+    Copyright (c) 2020 Antonio Sanchez <cantonios@google.com>
+    Copyright (c) 2020 Arm Limited and Contributors
+    Copyright (c) 2006-2011 Benoit Jacob <jacob.benoit.1@gmail.com>
+    Copyright (c) 2014-2016 Benoit Steiner (benoit.steiner.goog@gmail.com)
+    Copyright (c) 16 BfToF32Even (c) Packet4f
+    Copyright (c) 16 BfToF32Odd (c) Packet4f
+    Copyright (c) 2021 C. Antonio Sanchez <cantonios@google.com>
+    Copyright (c) 2021 Chip Kerchner (chip.kerchner@ibm.com)
+    Copyright (c) 2009 Claire Maurice
+    Copyright (c) 2017 Codeplay Software Limited
+    Copyright (c) 2016 Eugene Brevdo <ebrevdo@gmail.com>
+    Copyright (c) 2020 Everton Constantino (everton.constantino@ibm.com)
+    Copyright (c) 2016 Fabian Giesen
+    Copyright (c) 2008-2019 Gael Guennebaud <gael.guennebaud@inria.fr>
+    Copyright (c) 2013 Gauthier Brun <brun.gauthier@gmail.com>
+    Copyright (c) 2010-2013 Hauke Heibel <hauke.heibel@gmail.com>
+    Copyright (c) 2009 Hauke Heibel <hauke.heibel@gmail.com>
+    Copyright (c) 2001, 2010, 2011 Intel Corporation
+    Copyright (c) 2013 Jean Ceccato <jean.ceccato@ensimag.fr>
+    Copyright (c) 2010-2012 Jitse Niesen <jitse@maths.leeds.ac.uk>
+    Copyright (c) 2013 Jitse Niesen <jitse@maths.leeds.ac.uk>
+    Copyright (c) 2007 Julien Pommier
+    Copyright (c) 2009 Keir Mierle <mierle@gmail.com>
+    Copyright (c) 2009 Kenneth Riddile <kfriddile@yahoo.com>
+    Copyright (c) 2008-2016 Konstantinos Margaritis <markos@freevec.org>
+    Copyright (c) 2009 Mathieu Gautier <mathieu.gautier@cea.fr>
+    Copyright (c) 2007 Michael Olbrich <michael.olbrich@gmx.net>
+    Copyright (c) 2021 NVIDIA CORPORATION.
+    Copyright (c) 2013 Nicolas Carre <nicolas.carre@ensimag.fr>
+    Copyright (c) 2014-2015 Open Source Robotics Foundation
+    Copyright (c) 2013 Pavel Holoborodko <pavel@holoborodko.com>
+    Copyright (c) 2014, 2016 Pedro Gonnet (pedro.gonnet@gmail.com)
+    Copyright (c) 2013 Pierre Zoppitelli <pierre.zoppitelli@ensimag.fr>
+    Copyright (c) 2016, 2018, 2019 Rasmus Munk Larsen (rmlarsen@google.com)
+    Copyright (c) 2009 Ricard Marxer <email@ricardmarxer.com>
+    Copyright (c) 2009 Rohit Garg <rpg.314@gmail.com>
+    Copyright (c) 2017 The TensorFlow Authors
+    Copyright (c) 2010 Thomas Capricelli <orzel@freehackers.org>
+    Copyright (c) 2011 Timothy E. Holy tim.holy@gmail.com
+    Copyright (c) 2016 Tobias Wood <tobias@spinicist.org.uk>
+    Copyright (c) 2010 Vincent Lejeune
+    Copyright (c) 2018 Wave Computing, Inc.
+    Copyright (c) 2011-2014 Willow Garage, Inc.
+    Copyright (c) 2014 yoco <peter.xiau@gmail.com>
+------------------------------------------------------------------------------
+Embree 3.13.3
+  Used in Qt module(s): qtquick3d
+  License: Apache-2.0
+  Source: https://www.embree.org/
+  Copyright:
+    Copyright 2009-2021 Intel Corporation
+------------------------------------------------------------------------------
+fog unknown
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://godotengine.org/
+  Copyright:
+    Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.
+    Copyright (c) 2014-2022 Godot Engine contributors
+------------------------------------------------------------------------------
+forkfd unknown
+  Used in Qt module(s): qtbase
+  License: MIT
+  Copyright:
+    Copyright (C) 2016 Intel Corporation
+    Copyright (C) 2015 Klarälvdalens Datakonsult AB, a KDAB Group company, info@kdab.com
+------------------------------------------------------------------------------
+Freetype 2.13.3
+  Used in Qt module(s): qtbase
+  License: FTL OR GPL-2.0-only
+  Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz
+  Copyright:
+    Copyright (c) 2007-2014 Adobe Systems Incorporated
+    Copyright (c) 2004-2024 Albert Chin-A-Young
+    Copyright (c) 2018-2024 Armin Hasitzka, David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2000 Computing Research Labs, New Mexico State University
+    Copyright (c) 1996-2024 David Turner, Robert Wilhelm, Dominik Röttsches, and Werner Lemberg
+    Copyright (c) 2004-2024 David Turner, Robert Wilhelm, Werner Lemberg and George Williams
+    Copyright (c) 2022-2024 David Turner, Robert Wilhelm, Werner Lemberg, and Moazin Khatti
+    Copyright (c) 2008-2024 David Turner, Robert Wilhelm, Werner Lemberg, and suzuki toshiya
+    Copyright (c) 2003-2024 David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2005-2024 David Turner
+    Copyright (c) 2007-2024 Derek Clegg and Michael Toftdal
+    Copyright (c) 2007 Dmitry Timoshkov for Codeweavers
+    Copyright (c) 2001-2015 Francesco Zappa Nardelli
+    Copyright (c) 2005, 2007, 2008, 2013 George Williams
+    Copyright (c) 2013-2024 Google, Inc. Google Author(s) Behdad Esfahbod and Stuart Gill
+    Copyright (c) 2013-2022 Google, Inc.
+    Copyright (c) 2003 Huw D M Davies for Codeweavers
+    Copyright (c) 2010-2024 Joel Klinghed
+    Copyright (c) 1996-2024 Just van Rossum, David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2003-2024 Masatake YAMATO and Redhat K.K.
+    Copyright (c) 2004-2024 Masatake YAMATO, Redhat K.K, David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2019-2024 Nikhil Ramakrishnan, David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2009-2024 Oran Agra and Mickey Gabel
+    Copyright (c) 2007-2024 Rahul Bhalerao <rahul.bhalerao@redhat.com>
+    Copyright (c) 2002-2024 Roberto Alameda
+    Copyright (c) 2015-2024 Werner Lemberg
+    Copyright (c) 2004-2024 suzuki toshiya, Masatake YAMATO, Red Hat K.K., David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2019 nyorain
+    Copyright (c) 2022-2024 David Turner, Robert Wilhelm, Werner Lemberg, George Williams, and Dominik Röttsches
+    Copyright (C) 2009, 2023  Red Hat, Inc.
+------------------------------------------------------------------------------
+freetype-bdf 2.13.3
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz
+  Copyright:
+    Copyright (c) 2000 Computing Research Labs, New Mexico State University
+    Copyright (c) 2001-2014 Francesco Zappa Nardelli
+------------------------------------------------------------------------------
+freetype-pcf 2.13.3
+  Used in Qt module(s): qtbase
+  License: MIT AND MIT-open-group
+  Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz
+  Copyright:
+    Copyright (c) 2001, 2012 David Turner, Robert Wilhelm, and Werner Lemberg
+    Copyright (c) 2000-2014 Francesco Zappa Nardelli
+    Copyright (c) 1990, 1994, 1998 The Open Group
+------------------------------------------------------------------------------
+freetype-zlib 2.13.3
+  Used in Qt module(s): qtbase
+  License: Zlib
+  Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.13.3.tar.gz
+  Copyright:
+    Copyright (C) 1995-2023 Jean-loup Gailly and Mark Adler
+------------------------------------------------------------------------------
+Glslang_Glslang 14.2.0
+  Used in Qt module(s): qtshadertools
+  License: BSD-3-Clause AND LicenseRef-MIT-Khronos-old AND Apache-2.0 AND GPL-3.0-or-later WITH Bison-exception-2.2 AND AML-glslang
+  Source: https://github.com/KhronosGroup/glslang
+  Copyright:
+    Copyright (c) 2017, 2019 ARM Limited
+    Copyright (c) 2002-2005 3 Dlabs Inc. Ltd.
+    Copyright (c) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+    Copyright (c) 2014-2018 Google, Inc.
+    Copyright (c) 2002 NVIDIA Corporation
+    Copyright (c) 2002-2010 The ANGLE Project
+    Copyright (c) 2014-2019 The Khronos Group Inc.
+------------------------------------------------------------------------------
+Glslang_Osdependent 14.2.0
+  Used in Qt module(s): qtshadertools
+  License: BSD-3-Clause AND LicenseRef-MIT-Khronos-old AND Apache-2.0 AND GPL-3.0-or-later WITH Bison-exception-2.2 AND AML-glslang
+  Source: https://github.com/KhronosGroup/glslang
+  Copyright:
+    Copyright (c) 2017, 2019 ARM Limited
+    Copyright (c) 2002-2005 3 Dlabs Inc. Ltd.
+    Copyright (c) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+    Copyright (c) 2014-2018 Google, Inc.
+    Copyright (c) 2002 NVIDIA Corporation
+    Copyright (c) 2002-2010 The ANGLE Project
+    Copyright (c) 2014-2019 The Khronos Group Inc.
+------------------------------------------------------------------------------
+Glslang_Spirv 14.2.0
+  Used in Qt module(s): qtshadertools
+  License: BSD-3-Clause AND LicenseRef-MIT-Khronos-old AND Apache-2.0 AND GPL-3.0-or-later WITH Bison-exception-2.2 AND AML-glslang
+  Source: https://github.com/KhronosGroup/glslang
+  Copyright:
+    Copyright (c) 2017, 2019 ARM Limited
+    Copyright (c) 2002-2005 3 Dlabs Inc. Ltd.
+    Copyright (c) 1984, 1989-1990, 2000-2015 Free Software Foundation, Inc.
+    Copyright (c) 2014-2018 Google, Inc.
+    Copyright (c) 2002 NVIDIA Corporation
+    Copyright (c) 2002-2010 The ANGLE Project
+    Copyright (c) 2014-2019 The Khronos Group Inc.
+------------------------------------------------------------------------------
+grayraster unknown
+  Used in Qt module(s): qtbase
+  License: FTL OR GPL-2.0-only
+  Source: http://www.freetype.org
+  Copyright:
+    Copyright 2000-2016 by David Turner, Robert Wilhelm, and Werner Lemberg.
+------------------------------------------------------------------------------
+Harfbuzz 10.4.0
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/harfbuzz/harfbuzz/releases/tag/10.4.0
+  Copyright:
+    Copyright © 2010-2022  Google, Inc.
+    Copyright © 2015-2020  Ebrahim Byagowi
+    Copyright © 2019,2020  Facebook, Inc.
+    Copyright © 2012,2015  Mozilla Foundation
+    Copyright © 2011  Codethink Limited
+    Copyright © 2008,2010  Nokia Corporation and/or its subsidiary(-ies)
+    Copyright © 2009  Keith Stribley
+    Copyright © 2011  Martin Hosken and SIL International
+    Copyright © 2007  Chris Wilson
+    Copyright © 2005,2006,2020,2021,2022,2023  Behdad Esfahbod
+    Copyright © 2004,2007,2008,2009,2010,2013,2021,2022,2023  Red Hat, Inc.
+    Copyright © 1998-2005  David Turner and Werner Lemberg
+    Copyright © 2016  Igalia S.L.
+    Copyright © 2022  Matthias Clasen
+    Copyright © 2018,2021  Khaled Hosny
+    Copyright © 2018,2019,2020  Adobe, Inc
+    Copyright © 2013-2015  Alexei Podtelezhnikov
+------------------------------------------------------------------------------
+icc-srgb-color-profile unknown
+  Used in Qt module(s): qtbase
+  License: LicenseRef-ICC-License
+  Source: http://www.color.org/
+  Copyright:
+    Copyright International Color Consortium, 2015
+------------------------------------------------------------------------------
+jnipp 1.0.0
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://github.com/mitchdowd/jnipp
+  Copyright:
+    Copyright (c) 2016 Mitchell Dowd
+------------------------------------------------------------------------------
+jsoncpp 1.9.5
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://github.com/open-source-parsers/jsoncpp
+  Copyright:
+    Copyright (c) 2007-2010 Baptiste Lepilleur and The JsonCpp Authors
+------------------------------------------------------------------------------
+Libjpeg 3.1.0
+  Used in Qt module(s): qtbase
+  License: IJG AND BSD-3-Clause
+  Source: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz
+  Copyright:
+    Copyright (C) 2009-2024 D. R. Commander
+    Copyright (C) 2015, 2020 Google, Inc.
+    Copyright (C) 2019-2020 Arm Limited
+    Copyright (C) 2015-2016, 2018 Matthieu Darbois
+    Copyright (C) 2011-2016 Siarhei Siamashka
+    Copyright (C) 2015 Intel Corporation
+    Copyright (C) 2013-2014 Linaro Limited
+    Copyright (C) 2013-2014 MIPS Technologies, Inc.
+    Copyright (C) 2009, 2012 Pierre Ossman for Cendio AB
+    Copyright (C) 2009-2011 Nokia Corporation and/or its subsidiary(-ies)
+    Copyright (C) 1999-2006 MIYASAKA Masaru
+    Copyright (C) 1999 Ken Murchison
+    Copyright (C) 1991-2020 Thomas G. Lane, Guido Vollbeding
+------------------------------------------------------------------------------
+Libjpeg12bits 3.1.0
+  Used in Qt module(s): qtbase
+  License: IJG AND BSD-3-Clause
+  Source: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz
+  Copyright:
+    Copyright (C) 2009-2024 D. R. Commander
+    Copyright (C) 2015, 2020 Google, Inc.
+    Copyright (C) 2019-2020 Arm Limited
+    Copyright (C) 2015-2016, 2018 Matthieu Darbois
+    Copyright (C) 2011-2016 Siarhei Siamashka
+    Copyright (C) 2015 Intel Corporation
+    Copyright (C) 2013-2014 Linaro Limited
+    Copyright (C) 2013-2014 MIPS Technologies, Inc.
+    Copyright (C) 2009, 2012 Pierre Ossman for Cendio AB
+    Copyright (C) 2009-2011 Nokia Corporation and/or its subsidiary(-ies)
+    Copyright (C) 1999-2006 MIYASAKA Masaru
+    Copyright (C) 1999 Ken Murchison
+    Copyright (C) 1991-2020 Thomas G. Lane, Guido Vollbeding
+------------------------------------------------------------------------------
+Libjpeg16bits 3.1.0
+  Used in Qt module(s): qtbase
+  License: IJG AND BSD-3-Clause
+  Source: https://github.com/libjpeg-turbo/libjpeg-turbo/releases/download/3.1.0/libjpeg-turbo-3.1.0.tar.gz
+  Copyright:
+    Copyright (C) 2009-2024 D. R. Commander
+    Copyright (C) 2015, 2020 Google, Inc.
+    Copyright (C) 2019-2020 Arm Limited
+    Copyright (C) 2015-2016, 2018 Matthieu Darbois
+    Copyright (C) 2011-2016 Siarhei Siamashka
+    Copyright (C) 2015 Intel Corporation
+    Copyright (C) 2013-2014 Linaro Limited
+    Copyright (C) 2013-2014 MIPS Technologies, Inc.
+    Copyright (C) 2009, 2012 Pierre Ossman for Cendio AB
+    Copyright (C) 2009-2011 Nokia Corporation and/or its subsidiary(-ies)
+    Copyright (C) 1999-2006 MIYASAKA Masaru
+    Copyright (C) 1999 Ken Murchison
+    Copyright (C) 1991-2020 Thomas G. Lane, Guido Vollbeding
+------------------------------------------------------------------------------
+Libpng 1.6.47
+  Used in Qt module(s): qtbase
+  License: Libpng AND libpng-2.0
+  Source: https://download.sourceforge.net/libpng/libpng-1.6.47.tar.xz
+  Copyright:
+    Copyright (c) 1995-2025 The PNG Reference Library Authors
+    Copyright (c) 2000-2025 Cosmin Truta
+    Copyright (c) 1998-2018 Glenn Randers-Pehrson
+    Copyright (c) 1996-1997 Andreas Dilger
+    Copyright (c) 1995-1996 Guy Eric Schalnat, Group 42, Inc.
+    Copyright (c) 2000-2017 Simon-Pierre Cadieux
+    Copyright (c) 2000-2017 Eric S. Raymond
+    Copyright (c) 2000-2017 Mans Rullgard
+    Copyright (c) 2000-2017 Gilles Vollant
+    Copyright (c) 2000-2017 James Yu
+    Copyright (c) 2000-2017 Mandar Sahastrabuddhe
+    Copyright (c) 1998-2000 Tom Lane
+    Copyright (c) 1998-2000 Willem van Schaik
+    Copyright (c) 1996-1997 John Bowler
+    Copyright (c) 1996-1997 Kevin Bracey
+    Copyright (c) 1996-1997 Sam Bushell
+    Copyright (c) 1996-1997 Magnus Holmgren
+    Copyright (c) 1996-1997 Greg Roelofs
+    Copyright (c) 1996-1997 Tom Tanner
+    Copyright (c) 1995-1996 Dave Martindale
+    Copyright (c) 1995-1996 Paul Schmidt
+    Copyright (c) 1995-1996 Tim Wegner
+------------------------------------------------------------------------------
+libpsl 664f3dc85259ec65e30248a61fa1c45b7b0e4c3f
+  Used in Qt module(s): qtbase
+  License: BSD-3-Clause
+  Source: https://github.com/rockdaboot/libpsl
+  Copyright:
+    Copyright 2014-2016 The Chromium Authors. All rights reserved.
+------------------------------------------------------------------------------
+libtiff 4.7.0
+  Used in Qt module(s): qtimageformats
+  License: libtiff
+  Source: https://download.osgeo.org/libtiff/tiff-4.7.0.tar.gz
+  Copyright:
+    Copyright (c) 1988-1997 Sam Leffler
+    Copyright (c) 1991-1997 Silicon Graphics, Inc.
+------------------------------------------------------------------------------
+libwebp 1.5.0
+  Used in Qt module(s): qtimageformats
+  License: BSD-3-Clause
+  Source: https://storage.googleapis.com/downloads.webmproject.org/releases/webp/libwebp-1.5.0.tar.gz
+  Copyright:
+    Copyright (c) 2010, Google Inc. All rights reserved.
+------------------------------------------------------------------------------
+masm unknown
+  Used in Qt module(s): qtdeclarative
+  License: BSD-2-Clause
+  Source: https://trac.webkit.org/wiki/JavaScriptCore
+  Copyright:
+    Copyright (C) 2003-2018 Apple Inc. All rights reserved.
+    Copyright (C) 2007 Justin Haygood (jhaygood@reaktix.com)
+    Copyright (C) 2007-2009 Torch Mobile, Inc. All rights reserved. (http://www.torchmobile.com/)
+    Copyright (C) 2009, 2010 University of Szeged
+    Copyright (C) 2009-2011 STMicroelectronics. All rights reserved.
+    Copyright (C) 2010 MIPS Technologies, Inc. All rights reserved.
+    Copyright (C) 2010 Peter Varga (pvarga@inf.u-szeged.hu), University of Szeged
+    Copyright (C) 2010 MIPS Technologies, Inc. All rights reserved.
+    Copyright (C) 2010, 2011 Research In Motion Limited. All rights reserved.
+    Copyright (C) 2011 Google Inc. All rights reserved.
+    Copyright (C) 2013 Samsung Electronics. All rights reserved.
+    Copyright (C) 2015 Cisco Systems, Inc. All rights reserved.
+    Copyright (c) 2002-2009 Vivek Thampi
+------------------------------------------------------------------------------
+md4 unknown
+  Used in Qt module(s): qtbase
+  License: CC0-1.0
+  Copyright:
+    Written by Alexander Peslyak - better known as Solar Designer <solar@openwall.com> - in 2001, and placed in the public domain. There's absolutely no warranty.
+------------------------------------------------------------------------------
+md4c 0.5.2
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/mity/md4c/releases/tag/release-0.5.2
+  Copyright:
+    Copyright © 2016-2024 Martin Mitáš
+------------------------------------------------------------------------------
+md5 unknown
+  Used in Qt module(s): qtbase
+  License: CC0-1.0
+  Copyright:
+    Written by Colin Plumb in 1993, no copyright is claimed. Ian Jackson <ian@chiark.greenend.org.uk>.
+------------------------------------------------------------------------------
+meshoptimizer v0.18
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://github.com/zeux/meshoptimizer
+  Copyright:
+    Copyright (c) 2016-2022 Arseny Kapoulkine
+------------------------------------------------------------------------------
+opengl-es2-headers Revision 27673
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://www.khronos.org/
+  Copyright:
+    Copyright (c) 2013-2014 The Khronos Group Inc.
+------------------------------------------------------------------------------
+opengl-headers Revision 27684
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://www.khronos.org/
+  Copyright:
+    Copyright (c) 2013-2014 The Khronos Group Inc.
+------------------------------------------------------------------------------
+OpenXR 1.0.34
+  Used in Qt module(s): qtquick3d
+  License: Apache-2.0
+  Source: https://www.khronos.org/openxr/
+  Copyright:
+    Copyright (c) 2017-2024, The Khronos Group Inc.
+    Copyright (c) 2017-2019, Valve Corporation
+    Copyright (c) 2017-2019, LunarG, Inc.
+------------------------------------------------------------------------------
+Pcre2 10.45
+  Used in Qt module(s): qtbase
+  License: LicenseRef-BSD-3-Clause-with-PCRE2-Binary-Like-Packages-Exception
+  Source: https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.bz2
+  Copyright:
+    Copyright (c) 1997-2024 University of Cambridge
+    Copyright (c) 2010-2024 Zoltan Herczeg
+------------------------------------------------------------------------------
+pcre2-sljit 10.45
+  Used in Qt module(s): qtbase
+  License: BSD-2-Clause
+  Source: https://github.com/PCRE2Project/pcre2/releases/download/pcre2-10.45/pcre2-10.45.tar.bz2
+  Copyright:
+    Copyright (c) 2009-2024 Zoltan Herczeg
+------------------------------------------------------------------------------
+pffft 02fe7715a5bf8bfd914681c53429600f94e0f536
+  Used in Qt module(s): qtmultimedia
+  License: BSD-3-Clause
+  Source: https://bitbucket.org/jpommier/pffft/get/02fe7715a5bf.zip
+  Copyright:
+    Copyright (c) 2013 Julien Pommier <pommier@modartt.com>
+    Copyright (c) 2004 the University Corporation for Atmospheric Research 'UCAR'
+------------------------------------------------------------------------------
+proceduralsky unknown
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://godotengine.org/
+  Copyright:
+    Copyright (c) 2007-2022 Juan Linietsky, Ariel Manzur.
+    Copyright (c) 2014-2022 Godot Engine contributors
+------------------------------------------------------------------------------
+psl-data 47264b57765919188b9f4144de8d95cf77e1b6dc, fetched on 2025-01-22
+  Used in Qt module(s): qtbase
+  License: MPL-2.0
+  Source: https://publicsuffix.org/list/public_suffix_list.dat
+  Copyright:
+    The list was originally provided by Jo Hermans <jo.hermans@gmail.com>.
+    It is now maintained on github (https://github.com/publicsuffix/list).
+------------------------------------------------------------------------------
+qbig5codecs unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 2000  Ming-Che Chuang
+    Copyright (C) 2001, 2002  James Su, Turbolinux Inc.
+    Copyright (C) 2002  WU Yi, HancomLinux Inc.
+    Copyright (C) 2001, 2002  Anthony Fok, ThizLinux Laboratory Ltd.
+------------------------------------------------------------------------------
+qbkcodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 2000 TurboLinux, Inc.  Written by Justin Yu and Sean Chen.
+    Copyright (C) 2001, 2002 Turbolinux, Inc.  Written by James Su.
+    Copyright (C) 2001, 2002 ThizLinux Laboratory Ltd.  Written by Anthony Fok.
+------------------------------------------------------------------------------
+qeucjpcodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 1999 Serika Kurusugawa.
+------------------------------------------------------------------------------
+qeuckrcodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 1999-2000 Mizi Research Inc.
+------------------------------------------------------------------------------
+qjiscodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 1999 Serika Kurusugawa.
+------------------------------------------------------------------------------
+qsjiscodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 1999 Serika Kurusugawa.
+------------------------------------------------------------------------------
+qtsciicodec unknown
+  Used in Qt module(s): qt5compat
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (C) 2000 Hans Petter Bieker.
+------------------------------------------------------------------------------
+ResonanceAudio e225aedb5ec7
+  Used in Qt module(s): qtmultimedia
+  License: Apache-2.0
+  Source: https://github.com/resonance-audio/resonance-audio/tree/e225aedb5ec76ca6a0fe7079c0b84dbcbb490553
+  Copyright:
+    Copyright (c) 2015, 2017, 2018 Google Inc.
+------------------------------------------------------------------------------
+rfc6234 unknown
+  Used in Qt module(s): qtbase
+  License: BSD-3-Clause
+  Copyright:
+    Copyright (c) 2011 IETF Trust and the persons identified as authors of the code.
+------------------------------------------------------------------------------
+rhi-miniengine-d3d12-mipmap 0aa79bad78992da0b6a8279ddb9002c1753cb849
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/microsoft/DirectX-Graphics-Samples
+  Copyright:
+    Copyright (c) 2015 Microsoft
+------------------------------------------------------------------------------
+sha1 unknown
+  Used in Qt module(s): qtbase
+  License: LicenseRef-SHA1-Public-Domain
+  Source: http://www.dominik-reichl.de/projects/csha1/
+  Copyright:
+    Copyright (C) Dominik Reichl <dominik.reichl@t-online.de>
+    Copyright (C) 2016 The Qt Company Ltd
+------------------------------------------------------------------------------
+sha3_endian 4b9e13ead2c5b5e41ca27c65de4dd69ae0bac228
+  Used in Qt module(s): qtbase
+  License: BSD-2-Clause
+  Copyright:
+    Copyright (c) 1998-2013, Brian Gladman, Worcester, UK. All rights reserved.
+------------------------------------------------------------------------------
+sha3_keccak 3.2
+  Used in Qt module(s): qtbase
+  License: CC0-1.0
+  Copyright:
+    Guido Bertoni, Joan Daemen, Michaël Peeters and Gilles Van Assche.
+    To the extent possible under law, the implementers have waived all copyright
+    and related or neighboring rights to the source code in this file.
+------------------------------------------------------------------------------
+shadow_angular_material unknown
+  Used in Qt module(s): qtdeclarative
+  License: MIT
+  Source: https://angularjs.org/
+  Copyright:
+    Copyright (c) 2014-2016 Google, Inc
+------------------------------------------------------------------------------
+siphash unknown
+  Used in Qt module(s): qtbase
+  License: CC0-1.0
+  Source: https://raw.githubusercontent.com/veorq/SipHash/adcbf09b1684a718f594faa650ffc56bacdb0777/siphash24.c
+  Copyright:
+    Copyright (C) 2012-2014 Jean-Philippe Aumasson
+    Copyright (C) 2012-2014 Daniel J. Bernstein <djb@cr.yp.to>
+    Copyright (C) 2016 Intel Corporation
+------------------------------------------------------------------------------
+smooth-scaling-algorithm unknown
+  Used in Qt module(s): qtbase
+  License: BSD-2-Clause AND Imlib2
+  Copyright:
+    Copyright (C) 2004, 2005 Daniel M. Duley.
+    (C) Carsten Haitzler and various contributors.
+    (C) Willem Monsuwe <willem@stack.nl>
+------------------------------------------------------------------------------
+Spirv_Cross 2d990d355a296ae1e368585810f884ebadcc4773
+  Used in Qt module(s): qtshadertools
+  License: Apache-2.0 AND LicenseRef-MIT-Khronos-old
+  Source: https://github.com/KhronosGroup/SPIRV-Cross
+  Copyright:
+    Copyright 2015-2020 Arm Limited
+    Copyright (c) 2014-2019 The Khronos Group Inc.
+    Copyright 2019-2020 Hans-Kristian Arntzen
+    Copyright 2016-2020 Robert Konrad
+    Copyright 2016-2020 The Brenwill Workshop Ltd.
+    Copyright 2018-2020 Bradley Austin Davis
+------------------------------------------------------------------------------
+sqlite 3.49.1
+  Used in Qt module(s): qtbase
+  License: blessing
+  Source: https://www.sqlite.org/2025/sqlite-amalgamation-3490100.zip
+  Copyright:
+    The authors disclaim copyright to the source code. However, a license can be obtained if needed.
+------------------------------------------------------------------------------
+tika-mimetypes 5101bc7fb090ed7deffe56837d7633c9485a1e5d
+  Used in Qt module(s): qtbase
+  License: Apache-2.0
+  Source: https://github.com/apache/tika/blob/5101bc7fb090ed7deffe56837d7633c9485a1e5d/tika-core/src/main/resources/org/apache/tika/mime/tika-mimetypes.xml
+  Copyright:
+    Copyright 2024 The Apache Software Foundation
+------------------------------------------------------------------------------
+tinycbor 0.6.1
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/intel/tinycbor/archive/v0.6.1/tinycbor-0.6.1.tar.gz
+  Copyright:
+    Copyright (C) 2015-2021 Intel Corporation
+------------------------------------------------------------------------------
+tinyexr v1.0.9
+  Used in Qt module(s): qtquick3d
+  License: BSD-3-Clause
+  Source: https://github.com/syoyo/tinyexr/releases/tag/v1.0.9
+  Copyright:
+    Copyright (c) 2014 - 2021, Syoyo Fujita and many contributors.
+------------------------------------------------------------------------------
+unicode-character-database 34
+  Used in Qt module(s): qtbase
+  License: Unicode-3.0
+  Source: https://www.unicode.org/ucd/
+  Copyright:
+    Copyright (C) 1991-2022 Unicode, Inc.
+------------------------------------------------------------------------------
+unicode-cldr v46.1
+  Used in Qt module(s): qtbase
+  License: Unicode-3.0
+  Source: https://cldr.unicode.org/
+  Copyright:
+    Copyright (C) 2004-2023 Unicode, Inc.
+------------------------------------------------------------------------------
+vulkan-xml-spec 1.3.223
+  Used in Qt module(s): qtbase
+  License: Apache-2.0 OR MIT
+  Source: https://www.khronos.org/
+  Copyright:
+    Copyright (c) 2015-2022 The Khronos Group Inc.
+------------------------------------------------------------------------------
+vulkanmemoryallocator 3.0.1
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator
+  Copyright:
+    Copyright (c) 2017-2024 Advanced Micro Devices, Inc. All rights reserved.
+------------------------------------------------------------------------------
+webgradients unknown
+  Used in Qt module(s): qtbase
+  License: MIT
+  Source: https://webgradients.com/
+  Copyright:
+    Copyright (c) 2017 itmeo
+------------------------------------------------------------------------------
+xatlas 16ace528acd2cf1f16a7c0dde99c42c486488dbe
+  Used in Qt module(s): qtquick3d
+  License: MIT
+  Source: https://github.com/jpcy/xatlas
+  Copyright:
+    Copyright (c) 2018-2020 Jonathan Young
+------------------------------------------------------------------------------
+xserverhelper unknown
+  Used in Qt module(s): qtbase
+  License: X11 AND HPND
+  Source: https://www.x.org/
+  Copyright:
+    Copyright (c) 1987, 1988 X Consortium
+    Copyright 1987, 1988 by Digital Equipment Corporation, Maynard, Massachusetts.
+------------------------------------------------------------------------------
+xsvg unknown
+  Used in Qt module(s): qtsvg
+  License: HPND-sell-variant
+  Copyright:
+    Copyright 2002 USC/Information Sciences Institute
+------------------------------------------------------------------------------
+ZLIB 1.3.1
+  Used in Qt module(s): qtbase
+  License: Zlib
+  Source: https://github.com/madler/zlib/releases/download/v1.3.1/zlib-1.3.1.tar.gz
+  Copyright:
+    (C) 1995-2024 Jean-loup Gailly and Mark Adler
+------------------------------------------------------------------------------

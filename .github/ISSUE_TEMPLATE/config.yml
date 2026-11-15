@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Account, license or billing question
+    url: https://rotorlab.app/contact-sales/
+    about: Talk to RotorLab, or email support@rotorlab.app, about your account, license key or billing.
+  - name: RotorLab GC docs
+    url: https://docs.rotorlab.app/
+    about: How to install, connect and fly with RotorLab GC. Security issues go to security@rotorlab.app, never a public issue.
+  - name: RotorLab Academy
+    url: https://academy.rotorlab.app/
+    about: Training for pilots and teams.

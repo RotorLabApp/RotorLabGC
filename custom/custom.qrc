@@ -1,0 +1,39 @@
+<RCC>
+    <qresource prefix="/custom/img">
+        <file alias="rotorlab-original.svg">res/Images/rotorlab-original.svg</file>
+        <file alias="rotorlab-black.svg">res/Images/rotorlab-black.svg</file>
+    </qresource>
+    <qresource prefix="/custom/res">
+        <file alias="rotorlab.ico">deploy/windows/WindowsQGC.ico</file>
+        <file alias="rotorlab.png">res/icons/custom_qgroundcontrol.png</file>
+    </qresource>
+    <!-- Overrides for stock QGC logo resources, resolved via CustomOverrideInterceptor -->
+    <qresource prefix="/Custom/res">
+        <file alias="QGCLogoFull.svg">res/Images/rotorlab-original.svg</file>
+        <file alias="QGCLogoWhite.svg">res/Images/rotorlab-white.svg</file>
+        <file alias="QGCLogoWhite">res/Images/rotorlab-white.svg</file>
+        <file alias="QGCLogoBlack.svg">res/Images/rotorlab-black.svg</file>
+    </qresource>
+    <!-- TAK settings page + settings-list override (resolved via CustomOverrideInterceptor) -->
+    <qresource prefix="/Custom/qml">
+        <file alias="QGroundControl/AppSettings/SettingsPagesModel.qml">res/tak/SettingsPagesModel.qml</file>
+        <file alias="QGroundControl/AppSettings/TAKSettings.qml">res/tak/TAKSettings.qml</file>
+        <file alias="QGroundControl/AppSettings/FleetSettings.qml">res/tak/FleetSettings.qml</file>
+        <file alias="QGroundControl/AppSettings/LicenseSettings.qml">res/license/LicenseSettings.qml</file>
+        <file alias="QGroundControl/AppSettings/FleetConnectorSettings.qml">res/fleet/FleetConnectorSettings.qml</file>
+        <file alias="QGroundControl/AppSettings/RotorLabConnectorSettings.qml">res/rotorlab/RotorLabConnectorSettings.qml</file>
+    </qresource>
+    <!-- License startup gate overlay (referenced directly by MainWindow) -->
+    <qresource prefix="/custom/license">
+        <file alias="LicenseGate.qml">res/license/LicenseGate.qml</file>
+    </qresource>
+    <!-- TAK remote command banner (referenced directly by MainWindow) -->
+    <qresource prefix="/custom/tak">
+        <file alias="RemoteCommandBanner.qml">res/tak/RemoteCommandBanner.qml</file>
+    </qresource>
+    <!-- Fleet Connector crew screen (referenced directly by MainWindow) -->
+    <qresource prefix="/custom/fleet">
+        <file alias="CrewScreen.qml">res/fleet/CrewScreen.qml</file>
+        <file alias="ChecklistRunner.qml">res/fleet/ChecklistRunner.qml</file>
+    </qresource>
+</RCC>
