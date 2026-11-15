@@ -7,7 +7,7 @@
 RotorLab GC is a modified version of QGroundControl. Changes in this release:
 
 - **Android app id**: the Android app is now `com.rotorlab.gc`, so it installs next to a stock QGroundControl on the same device. If you installed the 5.1.0 APK, 5.1.1 installs as a separate app, and its settings do not carry over from 5.1.0.
-- **Android icon, splash screen and name**: the Android app now shows RotorLab GC's own icon, splash screen and name. 5.1.0 showed QGroundControl's, because a build step left out GC's own Android files.
+- **Android icon, splash screen and name**: the Android app now shows RotorLab GC's own icon, splash screen and name. 5.1.0 showed QGroundControl's.
 - **Android USB permission**: the request for permission to use a USB device is now private to GC, so it is not shared with QGroundControl or another app on the device.
 - **Windows installer**: the installer no longer includes Microsoft's debug runtime libraries or Qt's QML debugger plugins.
 - **Licenses**: the Windows installer and the Android APK now include NOTICE and the license texts (Windows: next to bin/; Android: assets/licenses/).
