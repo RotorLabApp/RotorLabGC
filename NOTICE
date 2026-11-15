@@ -3,8 +3,8 @@ Copyright (c) 2026 RotorLab Inc, for RotorLab's changes.
 
 RotorLab GC is a modified version of QGroundControl, the ground control
 station of the Dronecode project (https://github.com/mavlink/qgroundcontrol).
-RotorLab Inc modified it in 2026; this notice was last updated on
-2026-11-15. QGroundControl is Copyright (c) 2009-2024 QGroundControl
+RotorLab Inc modified it in 2026; this notice was last updated on 2026-11-15
+for RotorLab GC 5.1.1. QGroundControl is Copyright (c) 2009-2024 QGroundControl
 Project and its contributors, and is dual licensed under the Apache License
 2.0 (LICENSE-APACHE) and the GNU General Public License v3 (LICENSE-GPL); see
 COPYING.md. Upstream copyright and license notices are kept as they appear
@@ -46,20 +46,19 @@ e0816c957602789200ae5ba0af45217f0f2f1db4):
   per-user single-instance check (src/RunGuard.*), and smaller fixes.
 - test/Custom/: unit tests for RotorLab's features.
 - cmake/, CMakeLists.txt, android/, custom/android/, deploy/: build options,
-  the Windows installer and version resource, and the release script
-  deploy/rotorlab/release.ps1.
-- Documentation and notices: README.md, NOTICE, COPYING.md, licenses/,
-  SECURITY.md, CONTRIBUTING.md, CHANGELOG.md (RotorLab section) and
-  docs/images/.
+  the Windows installer and version resource, installing the license files
+  with the binaries, and the release script deploy/rotorlab/release.ps1.
+- Documentation and notices: NOTICE, COPYING.md, licenses/, CHANGELOG.md
+  (RotorLab section).
 
 
 THIRD-PARTY COMPONENTS
 
 A RotorLab GC release build includes the components below, in addition to
 QGroundControl itself. Each is used under its own license. The full license
-texts and notices are in the licenses/ folder of this repository. RotorLab
-intends its RotorLab GC 5.1.1 and later installers and APKs to carry them
-(Windows: next to bin/; Android: assets/licenses/); earlier builds do not. The source of each component is available from the
+texts and notices are in the licenses/ folder of this repository and are
+installed with the Windows installer (next to bin/) and the Android APK
+(assets/licenses/). The source of each component is available from the
 location shown, at the version shown.
 
 Qt 6.8.3 (The Qt Company), dynamically linked, on Windows and Android:
@@ -140,20 +139,18 @@ Android only:
     https://github.com/llvm/llvm-project
   usb-serial-for-android 3.8.1, MIT License.
     https://github.com/mik3y/usb-serial-for-android (tag v3.8.1)
-  AndroidX Core 1.13.1 and its AndroidX dependencies (annotation,
-    annotation-experimental, arch core-runtime, collection, concurrent-futures,
-    interpolator, lifecycle-runtime, profileinstaller, startup-runtime,
-    tracing, versionedparcelable), the Kotlin standard library and
-    kotlinx.coroutines, Apache License 2.0
+  AndroidX Core 1.13.1 and its AndroidX dependencies (among them
+    annotation-experimental 1.4.0, arch core-runtime, interpolator 1.0.0,
+    lifecycle-runtime, profileinstaller 1.3.0, startup-runtime 1.1.1,
+    tracing 1.0.0, versionedparcelable 1.1.1), the Kotlin standard library
+    and kotlinx.coroutines 1.6.4, Apache License 2.0
     (licenses/components/AndroidX-LICENSE.txt,
     licenses/components/Kotlin-LICENSE.txt).
     https://android.googlesource.com/platform/frameworks/support,
     https://github.com/JetBrains/kotlin, https://github.com/Kotlin/kotlinx.coroutines
 
-Exact revisions for components the build fetches by commit, branch or
-moving archive, as recorded from the RotorLab GC 5.1.0 build's CPM source
-cache (to be re-checked against the 5.1.1 build; a build you make yourself may fetch newer
-revisions of the branch-based ones):
+Exact revisions used by this release for components the build fetches by
+commit, branch or moving archive (recorded from the build's CPM source cache):
   ulog_cpp (main): af366a91cb90a454f8840cc019ae82571cc4cef6
   SDL_GameControllerDB (master): 8d9fefd7b810f2541f78cc7a8ccbd185bc84c7a5
   zlib (develop): e3dc0a85b7032e98380dec011bc8f2c2ee0d8fca

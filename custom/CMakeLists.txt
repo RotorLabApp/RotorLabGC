@@ -17,7 +17,19 @@ if(ANDROID)
             set(DEFAULT_ANDROID_DIR "${CMAKE_SOURCE_DIR}/android")
             set(FINAL_ANDROID_DIR "${CMAKE_BINARY_DIR}/custom/android")
             file(COPY "${DEFAULT_ANDROID_DIR}/." DESTINATION "${FINAL_ANDROID_DIR}")
-            file(COPY "${CUSTOM_ANDROID_DIR}/." DESTINATION "${FINAL_ANDROID_DIR}")
+            # RotorLab: overwrite with every custom file, unconditionally. file(COPY)
+            # skips a file whose timestamp matches the one already copied from
+            # android/ (as happens in a fresh checkout), so the custom manifest
+            # (package com.rotorlab.gc), icons and splash were silently dropped.
+            # The copies get the current time so androiddeployqt, which copies only
+            # newer files into android-build, takes them on an incremental build too.
+            file(GLOB_RECURSE CUSTOM_ANDROID_OVERLAY RELATIVE "${CUSTOM_ANDROID_DIR}" "${CUSTOM_ANDROID_DIR}/*")
+            foreach(_overlay_file IN LISTS CUSTOM_ANDROID_OVERLAY)
+                get_filename_component(_overlay_dir "${FINAL_ANDROID_DIR}/${_overlay_file}" DIRECTORY)
+                file(MAKE_DIRECTORY "${_overlay_dir}")
+                file(COPY_FILE "${CUSTOM_ANDROID_DIR}/${_overlay_file}" "${FINAL_ANDROID_DIR}/${_overlay_file}")
+                file(TOUCH_NOCREATE "${FINAL_ANDROID_DIR}/${_overlay_file}")
+            endforeach()
             set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
                             "${DEFAULT_ANDROID_DIR}/"
                             "${CUSTOM_ANDROID_DIR}/"

@@ -513,6 +513,21 @@ elseif(ANDROID)
     )
     include(${android_openssl_SOURCE_DIR}/android_openssl.cmake)
     add_android_openssl_libraries(${CMAKE_PROJECT_NAME})
+
+    # RotorLab: the license texts and notices ship in the APK as assets/licenses/
+    # (NOTICE, COPYING.md, LICENSE-GPL, LICENSE-APACHE and the licenses/ texts).
+    # custom/android/build.gradle adds ../android-license-assets (next to android-build)
+    # to the asset sources.
+    set(QGC_ANDROID_LICENSE_ASSETS "${CMAKE_BINARY_DIR}/android-license-assets/licenses")
+    add_custom_target(${CMAKE_PROJECT_NAME}_license_assets
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${QGC_ANDROID_LICENSE_ASSETS}"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_SOURCE_DIR}/licenses" "${QGC_ANDROID_LICENSE_ASSETS}"
+        COMMAND ${CMAKE_COMMAND} -E copy NOTICE COPYING.md LICENSE-GPL LICENSE-APACHE "${QGC_ANDROID_LICENSE_ASSETS}"
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        COMMENT "Copying license files to the APK assets"
+        VERBATIM
+    )
+    add_dependencies(${CMAKE_PROJECT_NAME} ${CMAKE_PROJECT_NAME}_license_assets)
 endif()
 
 target_compile_definitions(${CMAKE_PROJECT_NAME}

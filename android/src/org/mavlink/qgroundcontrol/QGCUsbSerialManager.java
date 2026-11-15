@@ -17,7 +17,11 @@ import java.util.concurrent.*;
 
 public class QGCUsbSerialManager {
     private static final String TAG = QGCUsbSerialManager.class.getSimpleName();
-    private static final String ACTION_USB_PERMISSION = "org.mavlink.qgroundcontrol.action.USB_PERMISSION";
+    // RotorLab: the USB permission broadcast action is keyed to the installed
+    // application id (set in initialize()), so this app and a stock
+    // QGroundControl on the same device never share the action string.
+    private static final String ACTION_USB_PERMISSION_SUFFIX = ".action.USB_PERMISSION";
+    private static String actionUsbPermission = "org.mavlink.qgroundcontrol" + ACTION_USB_PERMISSION_SUFFIX;
     private static final int BAD_DEVICE_ID = 0;
     private static final int READ_BUF_SIZE = 2048;
 
@@ -64,6 +68,7 @@ public class QGCUsbSerialManager {
             QGCLogger.e(TAG, "Failed to get UsbManager");
             return;
         }
+        actionUsbPermission = context.getPackageName() + ACTION_USB_PERMISSION_SUFFIX;
         setupUsbPermissionIntent(context);
         registerUsbReceiver(context);
         usbSerialProber = UsbSerialProber.getDefaultProber();
@@ -93,7 +98,9 @@ public class QGCUsbSerialManager {
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
             intentFlags = PendingIntent.FLAG_IMMUTABLE;
         }
-        usbPermissionIntent = PendingIntent.getBroadcast(context, 0, new Intent(ACTION_USB_PERMISSION), intentFlags);
+        Intent permissionIntent = new Intent(actionUsbPermission);
+        permissionIntent.setPackage(context.getPackageName());
+        usbPermissionIntent = PendingIntent.getBroadcast(context, 0, permissionIntent, intentFlags);
     }
 
     /**
@@ -105,7 +112,7 @@ public class QGCUsbSerialManager {
         IntentFilter filter = new IntentFilter();
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
-        filter.addAction(ACTION_USB_PERMISSION);
+        filter.addAction(actionUsbPermission);
         // TODO: Move bluetooth handling back to QGCActivity
         filter.addAction(BluetoothDevice.ACTION_ACL_CONNECTED);
         filter.addAction(BluetoothDevice.ACTION_ACL_DISCONNECTED);
@@ -134,18 +141,12 @@ public class QGCUsbSerialManager {
             final String action = intent.getAction();
             QGCLogger.i(TAG, "BroadcastReceiver USB action " + action);
 
-            switch (action) {
-                case ACTION_USB_PERMISSION:
-                    handleUsbPermission(intent);
-                    break;
-                case UsbManager.ACTION_USB_DEVICE_DETACHED:
-                    handleUsbDeviceDetached(intent);
-                    break;
-                case UsbManager.ACTION_USB_DEVICE_ATTACHED:
-                    handleUsbDeviceAttached(intent);
-                    break;
-                default:
-                    break;
+            if (actionUsbPermission.equals(action)) {
+                handleUsbPermission(intent);
+            } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
+                handleUsbDeviceDetached(intent);
+            } else if (UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
+                handleUsbDeviceAttached(intent);
             }
 
             updateCurrentDrivers();

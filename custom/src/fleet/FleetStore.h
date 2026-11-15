@@ -6,10 +6,13 @@
  * QSettings group "FleetConnector".
  *
  * The station token is a bearer credential: anything holding it can report
- * telemetry as this crew. It is never logged and never placed in a URL. On
- * Windows it is sealed with DPAPI (CryptProtectData, user-scoped) so a copy
- * of the ini on another machine or under another account is useless. Android
- * relies on app-private storage. On other platforms it is stored as is.
+ * telemetry as this crew. It is never logged and never placed in a URL. How
+ * it is stored depends on the platform. On Windows it is sealed with DPAPI
+ * (CryptProtectData, user-scoped) so a copy of the ini on another machine or
+ * under another account is useless. On every other platform it is stored as
+ * is (plaintext) in the settings file: Android keeps that file in app-private
+ * storage, while on Linux and macOS it is protected only by the user
+ * account's file permissions.
  *
  * Disconnect clears every key here. It is deliberately a local action - it
  * does not tell the Fleet Server anything, and the station stays in the

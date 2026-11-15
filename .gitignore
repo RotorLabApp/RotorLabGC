@@ -105,6 +105,9 @@ cpm_modules
 *.aab
 *-installer.exe
 # Signing material and secrets: never commit
-*.keystore
-*keystore.properties
 *.jks
+*.keystore
+*.p12
+*.pem
+*keystore*.properties
+*Secrets.h

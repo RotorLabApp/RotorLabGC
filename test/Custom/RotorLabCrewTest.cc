@@ -220,8 +220,8 @@ const char *kSorties = R"json({"day": "2026-11-20", "sorties": [
 
 void RotorLabCrewTest::_picVersionGate()
 {
-    // One constant (3.5.4 until the release is named). Older servers get
-    // today's pilot_id and crew string only.
+    // One constant: the first RotorLab server version that takes the PIC
+    // fields (3.5.4). Older servers get the pilot_id and crew string only.
     QVERIFY(!RotorLabPic::serverTakesPic(QString()));
     QVERIFY(!RotorLabPic::serverTakesPic(QStringLiteral("3.5.2")));
     QVERIFY(!RotorLabPic::serverTakesPic(QStringLiteral("3.5.3")));

@@ -112,24 +112,36 @@ Yes. Read the source here. GC sends flights, logs and checklist runs to your Rot
 
 ## Download
 
-Download RotorLab GC from your RotorLab account, starting at [app.rotorlab.app/buy/gc](https://app.rotorlab.app/buy/gc). Signed releases on this repository's GitHub Releases page follow with RotorLab GC 5.1.1.
+Download RotorLab GC from your RotorLab account, starting at [app.rotorlab.app/buy/gc](https://app.rotorlab.app/buy/gc).
+
+Signed releases are also on this repository's GitHub Releases page, starting with [RotorLab GC 5.1.1](https://github.com/RotorLabApp/RotorLabGC/releases/tag/v5.1.1). The 5.1.1 release has six files:
+
+- `RotorLabGC-v5.1.1-windows-x64-installer.exe`: the Windows installer, Authenticode-signed by RotorLab Inc.
+- `RotorLabGC-v5.1.1-android-arm64-v8a.apk`: the Android app for arm64, signed with RotorLab's Android key.
+- `SHA256SUMS.txt`: the SHA-256 of the installer and the APK.
+- `RotorLabGC-v5.1.1-windows-x64-installer.exe.sig`, `RotorLabGC-v5.1.1-android-arm64-v8a.apk.sig` and `SHA256SUMS.txt.sig`: a detached signature for each of those three files, made with the RotorLab release key.
+
+GC needs a license key from your RotorLab account, wherever you download it.
 
 ## Verify a release
 
-Each signed release comes with `SHA256SUMS.txt` and a `.sig` file for each release file, made with the RotorLab release key. To verify, save this line as a file named `allowed_signers`. It is our release public key; it holds no secret:
+Each signed release comes with `SHA256SUMS.txt` and a `.sig` file for `SHA256SUMS.txt`, the installer and the APK, made with the RotorLab release key. To verify, save this line as a file named `allowed_signers`. It is our release public key; it holds no secret:
 
 ```
 release@rotorlab.app namespaces="rotorlab-release" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM9oNOu1L0o1g6JAyIUyeb2A9/pkRwLvuQeJmey01AeJ release@rotorlab.app
 ```
 
-Its fingerprint is `SHA256:rp0unrj35IPjEQzYNrKCgpgglmBMwycOAAbxNRRG42s`. Then, with OpenSSH 8.1 or later (in a Windows command prompt, or any shell on Linux or macOS), check `SHA256SUMS.txt` and each file you downloaded:
+Its fingerprint is `SHA256:rp0unrj35IPjEQzYNrKCgpgglmBMwycOAAbxNRRG42s`. Then, with OpenSSH 8.1 or later (in a Windows command prompt, or any shell on Linux or macOS), check `SHA256SUMS.txt` and each file you downloaded. For 5.1.1:
 
 ```
 ssh-keygen -Y verify -f allowed_signers -I release@rotorlab.app -n rotorlab-release -s SHA256SUMS.txt.sig < SHA256SUMS.txt
-ssh-keygen -Y verify -f allowed_signers -I release@rotorlab.app -n rotorlab-release -s <file>.sig < <file>
+ssh-keygen -Y verify -f allowed_signers -I release@rotorlab.app -n rotorlab-release -s RotorLabGC-v5.1.1-windows-x64-installer.exe.sig < RotorLabGC-v5.1.1-windows-x64-installer.exe
+ssh-keygen -Y verify -f allowed_signers -I release@rotorlab.app -n rotorlab-release -s RotorLabGC-v5.1.1-android-arm64-v8a.apk.sig < RotorLabGC-v5.1.1-android-arm64-v8a.apk
 ```
 
 Each must print `Good "rotorlab-release" signature for release@rotorlab.app`. Then check that each file's SHA-256 matches its line in `SHA256SUMS.txt`: in PowerShell, `Get-FileHash <file>`; on Linux, `tr -d '\r' < SHA256SUMS.txt | sha256sum -c --ignore-missing -` (the file uses Windows line endings).
+
+On Windows, you can also check the installer's Authenticode signature: in PowerShell, `Get-AuthenticodeSignature .\RotorLabGC-v5.1.1-windows-x64-installer.exe` must show `Valid`, signed by RotorLab Inc.
 
 ## Build from source
 
@@ -139,11 +151,13 @@ You need:
 - CMake 3.25 or later and Ninja;
 - on Windows, Visual Studio 2022 with the C++ workload; for Android, the Android SDK, NDK 26.1.10909125 and JDK 17.
 
-Clone with the submodule (and check out a release tag once one is published), then configure and build:
+Clone with the submodule, check out the release tag you want (for example `v5.1.1`), then configure and build:
 
 ```
 git clone --recurse-submodules https://github.com/RotorLabApp/RotorLabGC.git
 cd RotorLabGC
+git checkout v5.1.1
+git submodule update --init
 qt-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DQGC_STABLE_BUILD=ON
 cmake --build build
 ```
@@ -154,7 +168,7 @@ A build you make yourself is not byte-identical to our signed release and carrie
 
 ## License
 
-RotorLab GC is a modified version of QGroundControl. QGroundControl is dual licensed under the [Apache License 2.0](LICENSE-APACHE) and the [GNU General Public License v3](LICENSE-GPL), and RotorLab's changes are offered under the same two licenses, at your choice. The Windows installer and Android APK we publish are built with the open-source edition of Qt, which includes modules offered only under the GPL v3, so those builds are distributed under the GNU General Public License v3. RotorLab Inc modified QGroundControl in 2026; this notice was last updated on 2026-11-15. Upstream copyright and license notices are kept as they appear upstream. As both licenses state, the software is provided without warranty. See [COPYING.md](COPYING.md), and [NOTICE](NOTICE) for what RotorLab changed and for the third-party components and licenses a build includes. The license texts and NOTICE are in this repository. Builds of RotorLab GC before 5.1.1 do not include them inside the installer or APK; we intend to include them from 5.1.1 on.
+RotorLab GC is a modified version of QGroundControl. QGroundControl is dual licensed under the [Apache License 2.0](LICENSE-APACHE) and the [GNU General Public License v3](LICENSE-GPL), and RotorLab's changes are offered under the same two licenses, at your choice. The Windows installer and Android APK we publish are built with the open-source edition of Qt, which includes modules offered only under the GPL v3, so those builds are distributed under the GNU General Public License v3. RotorLab Inc modified QGroundControl in 2026; this notice was last updated on 2026-11-15. Upstream copyright and license notices are kept as they appear upstream. As both licenses state, the software is provided without warranty. See [COPYING.md](COPYING.md), and [NOTICE](NOTICE) for what RotorLab changed and for the third-party components and licenses a build includes. The license texts and NOTICE are in this repository. The Windows installer and Android APK of RotorLab GC 5.1.1 and later include these license texts and NOTICE (Windows: next to bin/; Android: assets/licenses/). Builds before 5.1.1 do not.
 
 QGroundControl and Dronecode are trademarks of their respective owners, as are ArduPilot, PX4, ATAK and TAK. RotorLab and RotorLab GC are trademarks of RotorLab Inc. Naming these projects and products describes what GC is built on and works with. It does not imply endorsement by, or affiliation with, the QGroundControl project, the Dronecode Foundation, ArduPilot, PX4, the TAK Product Center or any other third party.
 

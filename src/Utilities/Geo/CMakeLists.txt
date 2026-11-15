@@ -8,6 +8,12 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 
 #===========================================================================#
 
+# RotorLab: G21. GeographicLib's CMakeLists sets CMAKE_INSTALL_DEBUG_LIBRARIES ON and then
+# includes InstallRequiredSystemLibraries, so its install step copied the debug VC++ runtime
+# (*140d.dll, not redistributable) into the app. The root cmake/Install.cmake already installs
+# the release runtime; skip GeographicLib's runtime install rules (this directory scope only).
+set(CMAKE_INSTALL_SYSTEM_RUNTIME_LIBS_SKIP ON)
+
 CPMAddPackage(
     NAME geographiclib
     VERSION 2.5

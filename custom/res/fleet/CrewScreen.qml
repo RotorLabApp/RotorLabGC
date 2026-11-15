@@ -296,10 +296,9 @@ Popup {
                 wrapMode: Text.WordWrap
                 color: _noteColor
                 // RotorLab 3.5.2 and later file a flight with no pilot as
-                // "Pilot not named" and list it for naming (A54, decision 701
-                // C3). An older or not yet verified server does not, so the
-                // copy then says only what this station does. The Fleet text
-                // is kept.
+                // "Pilot not named" and list it for naming (A54). An older or
+                // not yet verified server does not, so the copy then says only
+                // what this station does. The Fleet text is kept.
                 text: backend !== RotorLabConnector
                       ? qsTr("Recorded against this sortie's flights. You can skip this and fly: " +
                              "the flight is still logged, with no pilot named on it.")

@@ -19,7 +19,7 @@ namespace {
 
 constexpr auto kGroup      = "FleetConnector";
 constexpr auto kBaseUrl    = "baseUrl";
-constexpr auto kToken      = "token";           // DPAPI-sealed on Windows
+constexpr auto kToken      = "token";           // DPAPI-sealed on Windows; plaintext elsewhere (see FleetStore.h)
 constexpr auto kStationName = "stationName";
 constexpr auto kStationId  = "stationId";
 constexpr auto kServerPin  = "serverPin";       // lowercase hex SPKI SHA-256, or absent
@@ -109,8 +109,10 @@ QByteArray FleetStore::_seal(const QString &plain)
     // operator re-enroll.
     return {};
 #else
-    // Android: app-private storage is the protection. Nothing to add here that
-    // would not be a key sitting beside the thing it encrypts.
+    // Not Windows: the token is stored as is (plaintext). On Android the
+    // settings file is in app-private storage; on Linux and macOS only the
+    // user account's file permissions protect it. Encrypting here without an
+    // OS key store would only put the key beside the thing it encrypts.
     return raw;
 #endif
 }

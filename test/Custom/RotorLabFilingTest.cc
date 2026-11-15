@@ -148,8 +148,8 @@ void RotorLabFilingTest::_packSerials()
 
 void RotorLabFilingTest::_serverFlightTypeSet()
 {
-    // A56: the same ten codes as the server's FLIGHT_TYPES and the openapi
-    // enum (the server's flight type list), compared as a set; order is GC's own.
+    // A56: the same ten codes as the server's FLIGHT_TYPES list and its
+    // OpenAPI flight type enum, compared as a set; order is GC's own.
     const QStringList server = {
         QStringLiteral("commercial"), QStringLiteral("training"), QStringLiteral("proficiency"),
         QStringLiteral("maintenance"), QStringLiteral("survey"), QStringLiteral("inspection"),

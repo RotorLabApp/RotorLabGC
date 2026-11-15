@@ -64,7 +64,10 @@ android {
             res.srcDirs = [qtAndroidDir + '/res', 'res']
             resources.srcDirs = ['resources']
             renderscript.srcDirs = ['src']
-            assets.srcDirs = ['assets']
+            // RotorLab: ../android-license-assets holds licenses/ (NOTICE and the
+            // license texts), written there by CMakeLists.txt; it becomes
+            // assets/licenses/ in the APK.
+            assets.srcDirs = ['assets', '../android-license-assets']
             jniLibs.srcDirs = ['libs']
        }
     }
@@ -114,4 +117,13 @@ android {
     println "project.name: ${project.name}"
     println "qtAndroidDir: ${qtAndroidDir}"
     println "Java Version: " + JavaVersion.current()
+}
+
+// RotorLab: release APKs carry no Qt QML debugger plugins (qmltooling).
+// androiddeployqt has no option to skip a plugin type, so they are left out
+// when Gradle packages the release variant.
+androidComponents {
+    onVariants(selector().withBuildType('release')) { variant ->
+        variant.packaging.jniLibs.excludes.add('**/libplugins_qmltooling_*.so')
+    }
 }

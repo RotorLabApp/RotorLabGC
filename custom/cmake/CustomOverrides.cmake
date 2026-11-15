@@ -1,5 +1,11 @@
 set(QGC_APP_NAME "RotorLabGC" CACHE STRING "App Name" FORCE)
 set(QGC_ORG_NAME "RotorLab" CACHE STRING "Org Name" FORCE)
+# Android application id only, so the APK installs next to stock QGroundControl.
+# QGC_PACKAGE_NAME stays upstream's: it names the Linux desktop/metainfo id and the
+# iOS bundle id. Desktop settings paths come from QGC_ORG_NAME/QGC_ORG_DOMAIN and
+# the app name, and the installer package dirs are fixed paths; none of them change.
+# Must match the namespace in custom/android/build.gradle and the manifest package.
+set(QGC_ANDROID_PACKAGE_NAME "com.rotorlab.gc" CACHE STRING "Android Package Name" FORCE)
 set(QGC_APP_COPYRIGHT "Copyright (c) 2009-2026 QGroundControl contributors and RotorLab Inc. Licensed under the GNU GPL v3." CACHE STRING "Copyright" FORCE)
 # A177: ProductName and FileDescription of the Windows exe version resource.
 set(QGC_WINDOWS_PRODUCT_NAME "RotorLab GC")

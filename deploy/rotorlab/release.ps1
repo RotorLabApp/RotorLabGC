@@ -49,6 +49,21 @@
 .PARAMETER OutDir
   Artifact folder. Default: <WorkDir>/artifacts. Must not exist or be empty.
 
+.PARAMETER VerifyExe
+  Only run the version check of an already built Windows exe (or Android .so)
+  against -Tag and exit. No git checks, no build. Used to test the check.
+
+.PARAMETER VerifyStaging
+  Only run the shipped-files checks on an install (staging) folder and exit:
+  exit 1 if a debug-only runtime (MSVC *d.dll, ucrtbased.dll, Qt6*d.dll) or a
+  Qt QML debugger plugin (qmltooling) is in it, or if NOTICE, COPYING.md,
+  LICENSE-GPL, LICENSE-APACHE or the licenses/ texts are missing.
+
+.PARAMETER VerifyApk
+  Only run the same checks on an APK and exit: exit 1 if it is debuggable,
+  packages a debug-only library or a qmltooling plugin, or lacks the license
+  files under assets/licenses/.
+
 .PARAMETER QtRoot
   Qt 6.8.3 install folder that holds msvc2022_64 and android_arm64_v8a.
   Default: C:/Qt/6.8.3.
@@ -58,11 +73,12 @@
   Default: the Community edition's standard folder.
 
 .PARAMETER NinjaDir
-  Folder that holds ninja.exe. Default: the folder of the first ninja.exe on PATH.
+  Folder holding ninja.exe. Default: the ninja.exe found on PATH.
 
 .PARAMETER CpmCache
-  CPM.cmake source cache for the third-party dependencies. Default:
-  $env:CPM_SOURCE_CACHE, else %LOCALAPPDATA%/RotorLabGC/cpm-cache.
+  CPM source cache. Default: $env:CPM_SOURCE_CACHE, else
+  %LOCALAPPDATA%/RotorLabGC/cpm-cache. Several dependencies are fetched from
+  branches, so a release uses the cache holding the revisions listed in NOTICE.
 
 .PARAMETER AndroidSdk
   Android SDK folder. Default: $env:ANDROID_SDK_ROOT, else %LOCALAPPDATA%/Android/Sdk.
@@ -72,10 +88,6 @@
 
 .PARAMETER JavaHome
   JDK 17 folder for the Android build. Default: $env:JAVA_HOME.
-
-.PARAMETER VerifyExe
-  Only run the version check of an already built Windows exe (or Android .so)
-  against -Tag and exit. No git checks, no build. Used to test the check.
 
 .EXAMPLE
   powershell -NoProfile -ExecutionPolicy Bypass -File deploy/rotorlab/release.ps1 -Tag v1.0.0
@@ -95,7 +107,9 @@ param(
     [string] $AndroidNdk,
     [string] $JavaHome      = $env:JAVA_HOME,
     [switch] $DryRun,
-    [string] $VerifyExe
+    [string] $VerifyExe,
+    [string] $VerifyStaging,
+    [string] $VerifyApk
 )
 
 Set-StrictMode -Version 3.0
@@ -255,8 +269,119 @@ function Test-ConfiguredVersion([string] $BuildDir, [string] $T) {
     return ($v -eq $T)
 }
 
+# ---------------------------------------------------------------- debug runtime check
+
+# RotorLab: G21. A release must ship no debug-only runtime: the MSVC debug runtime
+# (*140d*.dll, *140_Nd.dll, ucrtbased.dll; Microsoft does not allow redistributing it),
+# Qt debug libraries (Qt6*d.dll, or any Xd.dll next to its release twin X.dll) and, on
+# Android, debugger or sanitizer payloads. One function for both platforms: it takes the
+# shipped file paths (staging folder on Windows, APK entries on Android), matches file names,
+# prints every hit and returns $false when there is one.
+$DebugRuntimePatterns = @(
+    @{ Rx = '(?i)^(msvc[rp]|vcruntime|concrt|vccorlib|vcomp|vcamp|mfcm?)\d+(_\d+)?u?d(_\w+)?\.dll$'; Why = 'MSVC debug runtime' },
+    @{ Rx = '(?i)140d.*\.dll$';                Why = 'MSVC debug runtime (*140d*.dll)' },
+    @{ Rx = '(?i)140_\d+d\.dll$';              Why = 'MSVC debug runtime (*140_Nd.dll)' },
+    @{ Rx = '(?i)^ucrtbased\.dll$';            Why = 'debug Universal CRT' },
+    @{ Rx = '^Qt\d[A-Za-z0-9_]*d\.dll$';       Why = 'Qt debug library (Qt6*d.dll)' },    # case-sensitive: Qt6Quick3D.dll is release
+    @{ Rx = '(?i)^libclang_rt\..*\.so$';       Why = 'sanitizer runtime (debug-only)' },
+    @{ Rx = '(?i)^(gdbserver|lldb-server|libgdbserver\.so|liblldb-server\.so|wrap\.sh)$'; Why = 'native debugger payload' }
+)
+
+function Test-NoDebugRuntime([string[]] $Paths, [string] $Label) {
+    $hits = New-Object System.Collections.Generic.List[string]
+    $set = @{}
+    foreach ($p in $Paths) { $set[($p -replace '\\', '/').ToLowerInvariant()] = $true }
+    foreach ($p in $Paths) {
+        $norm = $p -replace '\\', '/'
+        $name = ($norm -split '/')[-1]
+        $why = $null
+        foreach ($d in $DebugRuntimePatterns) { if ($name -cmatch $d.Rx) { $why = $d.Why; break } }
+        # Debug twin: Xd.dll shipped next to its release X.dll (Qt plugins such as qwindowsd.dll).
+        if (-not $why -and $name -match '(?i)^(.+)d\.dll$') {
+            $twin = ($norm -replace '(?i)d\.dll$', '.dll').ToLowerInvariant()
+            if ($set.ContainsKey($twin)) { $why = "debug build of $($Matches[1]).dll" }
+        }
+        if ($why) { $hits.Add("$p  ($why)") }
+    }
+    Say "debug runtime check: $Label ($($Paths.Count) files)"
+    if ($hits.Count -eq 0) { Say "DEBUG RUNTIME CHECK PASS (file names): no debug-only runtime staged"; return $true }
+    foreach ($h in $hits) { Say "  DEBUG RUNTIME: $h" }
+    Say "DEBUG RUNTIME CHECK FAIL: $($hits.Count) debug-only file(s) staged"
+    return $false
+}
+
+# License texts and notices that every shipped artifact carries (GPLv3 sections 4 and 6,
+# LGPL, Apache 2.0 section 4, MIT/BSD binary clauses), and no Qt QML debugger plugins
+# (qmltooling), which cmake/Install.cmake keeps out of release deployments.
+# $NoticeDir holds NOTICE, LICENSE-GPL, LICENSE-APACHE and COPYING.md; $TextsDir holds the
+# license texts from licenses/. Both are path prefixes inside $Paths ('' for the root).
+function Test-ShippedNotices([string[]] $Paths, [string] $NoticeDir, [string] $TextsDir, [string] $Label) {
+    $set = @{}
+    foreach ($p in $Paths) { $set[($p -replace '\\', '/')] = $true }
+    $missing = New-Object System.Collections.Generic.List[string]
+    foreach ($f in @('NOTICE', 'LICENSE-GPL', 'LICENSE-APACHE', 'COPYING.md')) {
+        if (-not $set.ContainsKey("$NoticeDir$f")) { $missing.Add("$NoticeDir$f") }
+    }
+    foreach ($f in @('LGPL-3.0-only.txt', 'LGPL-2.1.txt', 'MIT.txt', 'BSD-3-Clause.txt', 'qt-third-party/QT-THIRD-PARTY.txt')) {
+        if (-not $set.ContainsKey("$TextsDir$f")) { $missing.Add("$TextsDir$f") }
+    }
+    $texts = @($set.Keys | Where-Object { $_.StartsWith($TextsDir) -and $_ -notin @("${NoticeDir}NOTICE", "${NoticeDir}LICENSE-GPL", "${NoticeDir}LICENSE-APACHE", "${NoticeDir}COPYING.md") })
+    $qmlDbg = @($set.Keys | Where-Object { $_ -match 'qmltooling' })
+    Say "license files check: $Label ($($texts.Count) files under '$TextsDir')"
+    foreach ($m in $missing) { Say "  MISSING: $m" }
+    foreach ($q in $qmlDbg) { Say "  QML DEBUGGER PLUGIN: $q" }
+    if ($missing.Count -eq 0 -and $qmlDbg.Count -eq 0) { Say "LICENSE FILES CHECK PASS: notices and license texts present, no qmltooling plugins"; return $true }
+    Say "LICENSE FILES CHECK FAIL"
+    return $false
+}
+
+# Windows: every file under the install (staging) folder, as paths relative to it.
+function Get-StagingPaths([string] $Dir) {
+    if (-not (Test-Path $Dir)) { Fail "staging folder not found: $Dir" }
+    $root = (Resolve-Path $Dir).Path.TrimEnd('\', '/')
+    return @(Get-ChildItem $root -Recurse -File | ForEach-Object { $_.FullName.Substring($root.Length + 1) -replace '\\', '/' })
+}
+
+function Test-StagingNoDebugRuntime([string] $Dir) {
+    $paths = Get-StagingPaths $Dir
+    $ok = Test-NoDebugRuntime $paths (Resolve-Path $Dir).Path
+    $lic = Test-ShippedNotices $paths '' 'licenses/' (Resolve-Path $Dir).Path
+    return ($ok -and $lic)
+}
+
+# Android: the APK's entries (lib/<abi>/*.so and the rest) through the same name check, and
+# the manifest must not be debuggable (aapt "dump badging" prints application-debuggable).
+function Test-ApkNoDebugRuntime([string] $Apk, [string] $Sdk) {
+    if (-not (Test-Path $Apk)) { Fail "APK not found: $Apk" }
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    $zip = [System.IO.Compression.ZipFile]::OpenRead((Resolve-Path $Apk).Path)
+    try { $entries = @($zip.Entries | Where-Object { $_.Name } | ForEach-Object { $_.FullName }) } finally { $zip.Dispose() }
+    $ok = Test-NoDebugRuntime $entries $Apk
+    $libs = @($entries | Where-Object { $_ -like 'lib/*' })
+    $abis = @($libs | ForEach-Object { ($_ -split '/')[1] } | Sort-Object -Unique)
+    Say "  native libraries      : $($libs.Count) under lib/ ($($abis -join ', '))"
+    if (-not (Test-ShippedNotices $entries 'assets/licenses/' 'assets/licenses/' $Apk)) { $ok = $false }
+    $aapt = Get-ChildItem (Join-Path $Sdk 'build-tools') -Recurse -Filter 'aapt.exe' -ErrorAction SilentlyContinue | Sort-Object FullName -Descending | Select-Object -First 1
+    if (-not $aapt) { Say "  aapt.exe not found under $Sdk/build-tools; cannot read the debuggable flag"; return $false }
+    $badging = @(& $aapt.FullName dump badging $Apk)
+    if ($LASTEXITCODE -ne 0) { Say "  aapt dump badging failed ($LASTEXITCODE)"; return $false }
+    if ($badging -match '^application-debuggable') {
+        Say "  DEBUG RUNTIME: AndroidManifest.xml has android:debuggable=true"
+        Say "DEBUG RUNTIME CHECK FAIL: debuggable APK"
+        return $false
+    }
+    Say "  android:debuggable    : not set (aapt dump badging)"
+    return $ok
+}
+
 if ($VerifyExe) {
     if (Test-WindowsExeVersion $VerifyExe $Tag (-not $DryRun)) { exit 0 } else { exit 1 }
+}
+if ($VerifyStaging) {
+    if (Test-StagingNoDebugRuntime $VerifyStaging) { exit 0 } else { exit 1 }
+}
+if ($VerifyApk) {
+    if (Test-ApkNoDebugRuntime $VerifyApk $AndroidSdk) { exit 0 } else { exit 1 }
 }
 
 # ---------------------------------------------------------------- preconditions
@@ -352,6 +477,10 @@ try {
             foreach ($k in $savedEnv.Keys) { Set-Item -Path "env:$k" -Value $savedEnv[$k] }
         }
 
+        # RotorLab: G21. The installer packs the staging folder: no debug runtime or QML
+        # debugger plugin may be in it, and the license files must be.
+        if (-not (Test-StagingNoDebugRuntime $staging)) { $WinOk = $false; Fail "shipped-files check failed for $staging (see above); the installer must not ship it" }
+
         $installer = Join-Path $bw "$AppName-installer.exe"
         if (-not (Test-Path $installer)) { Fail "installer was not created: $installer (makensis output above; CreateWinInstaller.cmake does not stop on a makensis error)" }
 
@@ -410,6 +539,8 @@ try {
         $apk = Get-ChildItem (Join-Path $ba 'android-build') -Recurse -Filter '*.apk' |
             Where-Object { $_.FullName -match '[\\/]outputs[\\/]apk[\\/]release[\\/]' } | Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if (-not $apk) { Fail "no release APK under $ba/android-build/build/outputs/apk/release" }
+        # RotorLab: G21. Same checks as Windows, plus android:debuggable.
+        if (-not (Test-ApkNoDebugRuntime $apk.FullName $AndroidSdk)) { Fail "shipped-files check failed for $($apk.FullName) (see above); APK was not copied" }
         $so = Get-ChildItem (Join-Path $ba 'android-build/libs') -Recurse -Filter "lib$AppName*.so" | Select-Object -First 1
         if (-not $so) { Fail "lib$AppName*.so not found under $ba/android-build/libs" }
 
@@ -432,7 +563,7 @@ try {
         if (-not $andOk) { Fail "Android version check failed; APK was not copied" }
         Say "VERSION CHECK PASS (Android): $Tag"
 
-        # Unsigned on purpose; the signing step signs it (zipalign, apksigner).
+        # Unsigned on purpose; the signing step signs it in place (apksigner).
         $apkOut = Join-Path $OutDir "$AppName-$Tag-android-$AndroidAbi.apk"
         Copy-Item $apk.FullName $apkOut
         $artifacts.Add($apkOut)

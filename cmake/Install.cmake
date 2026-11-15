@@ -8,12 +8,30 @@ install(
     BUNDLE  DESTINATION .
 )
 
+# RotorLab: the license texts and notices ship with every install, next to bin/
+# (GPLv3 sections 4 and 6, LGPL, Apache License 2.0 section 4, and the MIT and
+# BSD binary clauses). The Windows installer packs the whole install folder.
+# Android packages the same files as APK assets (CMakeLists.txt, custom/android/build.gradle).
+install(
+    FILES
+        ${CMAKE_SOURCE_DIR}/NOTICE
+        ${CMAKE_SOURCE_DIR}/COPYING.md
+        ${CMAKE_SOURCE_DIR}/LICENSE-GPL
+        ${CMAKE_SOURCE_DIR}/LICENSE-APACHE
+    DESTINATION .
+)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/licenses/ DESTINATION licenses)
+
 set(deploy_tool_options_arg "")
 if(MACOS OR WIN32)
     set(deploy_tool_options_arg "-qmldir=${CMAKE_SOURCE_DIR}")
     if(MACOS)
         list(APPEND deploy_tool_options_arg "-appstore-compliant")
     endif()
+endif()
+# RotorLab: release deployments carry no Qt QML debugger plugins (qmltooling).
+if(WIN32 AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    list(APPEND deploy_tool_options_arg "--skip-plugin-types" "qmltooling")
 endif()
 
 # Set extra deploy QML app script options for Qt 6.7.0 and above

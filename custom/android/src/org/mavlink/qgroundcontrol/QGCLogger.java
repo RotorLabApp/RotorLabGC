@@ -2,6 +2,7 @@ package org.mavlink.qgroundcontrol;
 
 import android.util.Log;
 
+// RotorLab: BuildConfig is generated in the Gradle namespace (com.rotorlab.gc).
 import com.rotorlab.gc.BuildConfig;
 
 /**
