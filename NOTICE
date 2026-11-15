@@ -57,9 +57,9 @@ THIRD-PARTY COMPONENTS
 
 A RotorLab GC release build includes the components below, in addition to
 QGroundControl itself. Each is used under its own license. The full license
-texts and notices are in the licenses/ folder of this repository. From
-RotorLab GC 5.1.1, RotorLab's release builds install them with the Windows
-installer (next to bin/) and the Android APK (assets/licenses/). The source of each component is available from the
+texts and notices are in the licenses/ folder of this repository. RotorLab
+intends its RotorLab GC 5.1.1 and later installers and APKs to carry them
+(Windows: next to bin/; Android: assets/licenses/); earlier builds do not. The source of each component is available from the
 location shown, at the version shown.
 
 Qt 6.8.3 (The Qt Company), dynamically linked, on Windows and Android:
@@ -150,9 +150,9 @@ Android only:
     https://android.googlesource.com/platform/frameworks/support,
     https://github.com/JetBrains/kotlin, https://github.com/Kotlin/kotlinx.coroutines
 
-Exact revisions used by the RotorLab GC 5.1.1 release build for components
-the build fetches by commit, branch or moving archive (recorded from that
-build's CPM source cache; a build you make yourself may fetch newer
+Exact revisions for components the build fetches by commit, branch or
+moving archive, as recorded from the RotorLab GC 5.1.0 build's CPM source
+cache (to be re-checked against the 5.1.1 build; a build you make yourself may fetch newer
 revisions of the branch-based ones):
   ulog_cpp (main): af366a91cb90a454f8840cc019ae82571cc4cef6
   SDL_GameControllerDB (master): 8d9fefd7b810f2541f78cc7a8ccbd185bc84c7a5
