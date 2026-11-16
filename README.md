@@ -26,6 +26,14 @@ RotorLab GC is a full MAVLink ground control station for ArduPilot and PX4 aircr
 
 GC records and warns. It never authorizes a flight, and the decision to fly stays with your pilot and your organization.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/gc-fly-view-dark.png">
+    <img src="docs/images/gc-fly-view-light.png" width="900" alt="The RotorLab GC fly view with a simulated aircraft flying in Guided mode at 10.0 ft over a sports field in a park, on satellite imagery. The top bar shows Flying, Guided, satellite count and battery; Land, Return, Pause and Actions sit on the left, the video record button on the right, and a compass and the altitude, speed and flight time readout at the bottom right.">
+  </picture>
+  <br><sub>The fly view with the demo aircraft DEMO-01 in a simulator (SITL), hovering in Guided mode over a public sports field. Imagery: Esri.</sub>
+</p>
+
 ## Contents
 
 - [Who it is for](#who-it-is-for)
@@ -93,6 +101,16 @@ Turn on the RotorLab Connector with a Device Key from your organization, and eac
 </p>
 
 In RotorLab, each flight sits on its aircraft's record. A flight GC files arrives there with its log, its checklist runs, its crew and its remote pilot in command periods.
+
+This is what a flight record looks like in RotorLab. The demo flight below was filed by uploading its log in RotorLab, not by GC:
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/rotorlab-flight-record-dark.png">
+    <img src="docs/images/rotorlab-flight-record-light.png" width="720" alt="A RotorLab flight record for the demo aircraft DEMO-01 flown by Alex Rivera at Demo Field, marked Filed from a log: 5 min flight time, 1 landing, no log findings and Log analyzed. What needs attention says No purpose was filed. The log file section reads Data quality: clean and Read from ArduCopter V4.5.7. The Remote pilot in command section says No operating basis is recorded for this flight and Alex Rivera was recorded as remote pilot in command for the whole flight.">
+  </picture>
+  <br><sub>A demo flight record in RotorLab, filed by uploading its log, not by GC. Fictional demo organization, pilot and aircraft.</sub>
+</p>
 
 ### Remote pilot in command, on record
 
