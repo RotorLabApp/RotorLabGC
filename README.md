@@ -84,6 +84,14 @@ Every verb, the marker syntax, the station checks and the command log are in the
 
 Turn on the RotorLab Connector with a Device Key from your organization, and each flight files to RotorLab when it ends, with its flight log, its checklist runs and a flight type from RotorLab's own list. The connector is designed not to hold up a launch.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/gc-rotorlab-connector-dark.png">
+    <img src="docs/images/gc-rotorlab-connector-light.png" width="900" alt="The RotorLab Connector settings page in GC, before setup: Enable RotorLab Connector is checked, the note reads Nothing here can hold up a launch, and under Device Key the status is Not configured, the key field shows only its rl_ hint, and Verify is not yet available.">
+  </picture>
+  <br><sub>Where you set up the RotorLab Connector in GC, shown before any key is entered.</sub>
+</p>
+
 In RotorLab, each flight sits on its aircraft's record. A flight GC files arrives there with its log, its checklist runs, its crew and its remote pilot in command periods.
 
 ### Remote pilot in command, on record
