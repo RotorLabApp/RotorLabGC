@@ -25,7 +25,7 @@ contributors.
 
 ## RotorLab GC
 
-RotorLab GC is a modified version of QGroundControl. RotorLab Inc modified it
+RotorLab GC is a modified version of QGroundControl. RotorLab, Inc. modified it
 in 2026. RotorLab's changes are offered under the same two licenses as
 QGroundControl, at your choice.
 

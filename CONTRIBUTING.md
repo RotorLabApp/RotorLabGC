@@ -6,9 +6,9 @@ This repository publishes the source of each RotorLab GC release, so you can rea
 
 ## Issues are welcome
 
-If you find a bug, please open an issue with the bug report template. Tell us the GC version, your platform, what you did, what you expected and what happened. Please leave out keys, passwords, flight logs and anything personal.
+If you find a bug, please open an issue with the bug report template, or ask with the question template. Tell us the GC version, your platform, what you did, what you expected and what happened. Please leave out keys, passwords, flight logs and anything personal. The [docs](docs/) folder, and its [troubleshooting](docs/troubleshooting.md) page in particular, may already have the answer.
 
-For account, license or billing questions, please email [support@rotorlab.app](mailto:support@rotorlab.app) instead of opening an issue.
+For account, license or billing questions, please contact RotorLab at [rotorlab.app/contact](https://rotorlab.app/contact) instead of opening an issue.
 
 For a security issue, please follow [SECURITY.md](SECURITY.md) and do not open a public issue.
 
@@ -19,3 +19,7 @@ For now, please do not open pull requests. We cannot merge changes from this rep
 ## Upstream QGroundControl
 
 A change that is not specific to RotorLab GC may belong in QGroundControl itself. See the QGroundControl project at https://github.com/mavlink/qgroundcontrol.
+
+## Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). Please be kind and constructive.

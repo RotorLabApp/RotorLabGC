@@ -1,6 +1,6 @@
-# QGroundControl Change Log
+# RotorLab GC changelog
 
-> **Note:** This file only contains high‑level features or important fixes.
+RotorLab GC is built on QGroundControl. RotorLab's releases come first; the history inherited from upstream QGroundControl follows, unchanged, under [Upstream QGroundControl history](#upstream-qgroundcontrol-history).
 
 ## [RotorLab GC] 5.1.1
 
@@ -20,6 +20,10 @@ RotorLab GC is a modified version of QGroundControl. Changes in this release:
 - **RotorLab Connector**: flights file to RotorLab with RotorLab's own flight types, readiness words and open work orders on the crew screen, planned crew first, remote pilot in command changes recorded at the station and filed with the flight, and a queue that saves each flight at landing and files it once.
 - **Device Key, license and start-up**: the Device Key is kept in the platform's key store where one exists, and is never touched while an aircraft is armed. The license is re-checked every 24 hours.
 - **Settings**: every settings page fills the window and reflows to its width.
+
+## Upstream QGroundControl history
+
+> **Note:** This file only contains high‑level features or important fixes.
 
 ## [5.0] – Daily Build
 

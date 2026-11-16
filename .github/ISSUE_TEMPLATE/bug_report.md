@@ -7,7 +7,7 @@ assignees: ''
 ---
 
 <!--
-Account, license or billing question? Please email support@rotorlab.app instead.
+Account, license or billing question? Please use https://rotorlab.app/contact instead.
 Security issue? Please email security@rotorlab.app and do not open a public issue.
 Please leave out keys, passwords, flight logs and anything personal.
 -->

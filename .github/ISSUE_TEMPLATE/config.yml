@@ -1,11 +1,17 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Report a security problem
+    url: https://github.com/RotorLabApp/RotorLabGC/security/policy
+    about: Report it privately, by email to security@rotorlab.app or GitHub private vulnerability reporting. Never in a public issue.
   - name: Account, license or billing question
     url: https://rotorlab.app/contact-sales/
-    about: Talk to RotorLab, or email support@rotorlab.app, about your account, license key or billing.
+    about: Talk to RotorLab, or use https://rotorlab.app/contact, about your account, license key or billing.
   - name: RotorLab GC docs
     url: https://docs.rotorlab.app/
     about: How to install, connect and fly with RotorLab GC. Security issues go to security@rotorlab.app, never a public issue.
+  - name: RotorLab GC ATAK and TAK Field Guide
+    url: https://github.com/RotorLabApp/rotorlab-gc-tak-guide
+    about: Every TAK and ATAK setting, verb, check and message in RotorLab GC.
   - name: RotorLab Academy
     url: https://academy.rotorlab.app/
     about: Training for pilots and teams.

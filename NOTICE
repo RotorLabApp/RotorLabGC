@@ -1,15 +1,15 @@
 RotorLab GC
-Copyright (c) 2026 RotorLab Inc, for RotorLab's changes.
+Copyright (c) 2026 RotorLab, Inc., for RotorLab's changes.
 
 RotorLab GC is a modified version of QGroundControl, the ground control
 station of the Dronecode project (https://github.com/mavlink/qgroundcontrol).
-RotorLab Inc modified it in 2026; this notice was last updated on 2026-11-15
-for RotorLab GC 5.1.1. QGroundControl is Copyright (c) 2009-2024 QGroundControl
-Project and its contributors, and is dual licensed under the Apache License
-2.0 (LICENSE-APACHE) and the GNU General Public License v3 (LICENSE-GPL); see
-COPYING.md. Upstream copyright and license notices are kept as they appear
-upstream. RotorLab's changes are offered under the same two licenses, at your
-choice.
+RotorLab, Inc. modified it in 2026; this notice was last updated on 2026-11-15
+for RotorLab GC 5.1.1. QGroundControl is Copyright (c) 2009-2024
+QGroundControl Project and its contributors, and is dual licensed under the
+Apache License 2.0 (LICENSE-APACHE) and the GNU General Public License v3
+(LICENSE-GPL); see COPYING.md. Upstream copyright and license notices are kept
+as they appear upstream. RotorLab's changes are offered under the same two
+licenses, at your choice.
 
 RotorLab's release builds (the Windows installer and the Android APK) link
 Qt modules that are offered only under the GNU GPL v3 (Qt Charts and Qt
@@ -48,8 +48,11 @@ e0816c957602789200ae5ba0af45217f0f2f1db4):
 - cmake/, CMakeLists.txt, android/, custom/android/, deploy/: build options,
   the Windows installer and version resource, installing the license files
   with the binaries, and the release script deploy/rotorlab/release.ps1.
-- Documentation and notices: NOTICE, COPYING.md, licenses/, CHANGELOG.md
-  (RotorLab section).
+- Documentation and project files: README.md, CHANGELOG.md (title,
+  introduction and RotorLab section; the upstream history follows
+  unchanged), SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md (adapted
+  from the Contributor Covenant 2.1, CC BY 4.0), docs/, the .github/ issue
+  and pull request templates, NOTICE, COPYING.md and licenses/.
 
 
 THIRD-PARTY COMPONENTS
@@ -183,9 +186,12 @@ licenses/qt-third-party/  third-party code in Qt 6.8.3, with copyright lines
 
 TRADEMARKS
 
-QGroundControl and Dronecode are trademarks of their respective owners, as
-are ArduPilot, PX4, ATAK and TAK. RotorLab and RotorLab GC are trademarks of
-RotorLab Inc. Naming these projects and products describes what GC is built
-on and works with. It does not imply endorsement by, or affiliation with, the
-QGroundControl project, the Dronecode Foundation, ArduPilot, PX4, the TAK
-Product Center or any other third party.
+QGroundControl, Dronecode, MAVLink, ArduPilot, PX4, ATAK, TAK and
+OpenTAKServer are trademarks of their respective owners. Qt is a registered
+trademark of The Qt Company Ltd. Windows is a trademark of the Microsoft group
+of companies. Android is a trademark of Google LLC. RotorLab and RotorLab GC
+are trademarks of RotorLab, Inc. Naming these projects and products describes
+what GC is built on and works with. It does not imply endorsement by, or
+affiliation with, the QGroundControl project, the Dronecode Foundation,
+ArduPilot, PX4, the TAK Product Center, the U.S. Government or any other third
+party.
