@@ -198,7 +198,7 @@ Step by step, with upgrade and uninstall: [docs/setup.md](docs/setup.md). The [d
 We publish RotorLab GC's source because a ground station should be something you can inspect, not something you have to take on trust.
 
 - **Built on QGroundControl,** the widely used open ground station from the Dronecode project.
-- **The source of every RotorLab GC release is here** to read and audit, including the TAK command handling and the RotorLab Connector.
+- **The source of each RotorLab GC release published here is in this repository** to read and audit, including the TAK command handling and the RotorLab Connector.
 - **Your security team can review the source** of the GC that runs on your field laptops and tablets.
 - **Signed releases from 5.1.1** that you can verify against our published key. You can also build GC yourself from the tagged source; your build will not carry our signatures or match ours byte for byte.
 - **Standard MAVLink.** GC speaks standard MAVLink and is built for ArduPilot and PX4 aircraft.
