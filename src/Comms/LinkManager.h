@@ -13,6 +13,7 @@
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QStringList>
 
+#include <atomic>
 #include <limits>
 
 #include "LinkConfiguration.h"
@@ -83,6 +84,16 @@ public:
     /// Sets the flag to allow new connections to be made
     void setConnectionsAllowed() { _connectionsSuspended = false; }
 
+    /// RotorLab: whether GC may open vehicle links at all (the license gate,
+    /// LicenseManager::linksAllowed, wired in CustomPlugin::init). While false
+    /// no link is created: auto-connect links do not start and a manual
+    /// connect is refused with @a refusedText. Turning it false disconnects
+    /// every link; turning it true starts the auto-connect links. True by
+    /// default, so builds and tests without the wiring are unchanged.
+    /// Thread safe to read (the joystick thread checks it before sending).
+    bool linksAllowed() const { return _linksAllowed.load(); }
+    void setLinksAllowed(bool allowed, const QString &refusedText = QString());
+
     /// Creates, connects (and adds) a link  based on the given configuration instance.
     bool createConnectedLink(SharedLinkConfigurationPtr &config);
 
@@ -121,6 +132,9 @@ public:
 signals:
     void mavlinkSupportForwardingEnabledChanged();
     void isBluetoothAvailableChanged();
+    void linksAllowedChanged(bool allowed);
+    /// A link was not created because links are not allowed (the text shown).
+    void linkRefused(const QString &text);
 
 private slots:
     void _linkDisconnected();
@@ -149,6 +163,8 @@ private:
     bool _mavlinkSupportForwardingEnabled = false;
     uint32_t _mavlinkChannelsUsedBitMask = 1;
     QString _connectionsSuspendedReason;            ///< User visible reason for suspension
+    std::atomic<bool> _linksAllowed{true};          ///< RotorLab: false while the license gate holds links back
+    QString _linksRefusedText;                      ///< User visible reason a link was refused
 
     QList<SharedLinkInterfacePtr> _rgLinks;
     QList<SharedLinkConfigurationPtr> _rgLinkConfigs;

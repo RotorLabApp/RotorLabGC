@@ -14,6 +14,7 @@
 #include "MavlinkActionsSettings.h"
 #include "FirmwarePlugin.h"
 #include "GimbalController.h"
+#include "LinkManager.h"
 #include "MultiVehicleManager.h"
 #include "QGCCorePlugin.h"
 #include "QGCLoggingCategory.h"
@@ -596,6 +597,11 @@ void Joystick::_handleAxis()
         return;
     }
 
+    // RotorLab: nothing goes to a vehicle while the license holds links back.
+    if (!LinkManager::instance()->linksAllowed()) {
+        return;
+    }
+
     int axis = _rgFunctionAxis[rollFunction];
     float roll = _adjustRange(_rgAxisValues[axis], _rgCalibration[axis], _deadband);
 
@@ -992,6 +998,11 @@ void Joystick::setCalibrationMode(bool calibrating)
 void Joystick::_executeButtonAction(const QString &action, bool buttonDown)
 {
     if (!_activeVehicle || !_activeVehicle->joystickEnabled() || (action == _buttonActionNone)) {
+        return;
+    }
+
+    // RotorLab: no arm, mode or other command while the license holds links back.
+    if (!LinkManager::instance()->linksAllowed()) {
         return;
     }
 

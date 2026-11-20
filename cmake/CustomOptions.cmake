@@ -26,7 +26,7 @@ cmake_dependent_option(QGC_DEBUG_QML "Build QGroundControl with QML debugging/pr
 
 # Features
 option(QGC_UTM_ADAPTER "Enable UTM Adapter" OFF)
-option(QGC_VIEWER3D "Enable Viewer3D" ON) # Qt6Quick3D_FOUND
+option(QGC_VIEWER3D "Enable Viewer3D" OFF) # Qt6Quick3D_FOUND. RotorLab G87: the old 3D viewer is removed from GC; custom/cmake/CustomOverrides.cmake forces it OFF
 # option(QGC_DISABLE_MAVLINK_INSPECTOR "Disable Mavlink Inspector" OFF) # This removes QtCharts which is GPL licensed
 
 # Comms
@@ -39,6 +39,13 @@ option(QGC_NO_SERIAL_LINK "Disable Serial Links" OFF) # NOT IOS AND Qt6SerialPor
 option(QGC_ENABLE_UVC "Enable UVC Devices" ON) # Qt6Multimedia_FOUND
 option(QGC_ENABLE_GST_VIDEOSTREAMING "Enable GStreamer Video Backend" ON)
 option(QGC_ENABLE_QT_VIDEOSTREAMING "Enable QtMultimedia Video Backend" OFF) # Qt6Multimedia_FOUND
+# G88: GC's own receiver on Qt's FFmpeg (src/VideoManager/VideoReceiver/FFmpeg), on when GStreamer is off
+if(QGC_ENABLE_GST_VIDEOSTREAMING)
+    set(_qgc_ffmpeg_video_default OFF)
+else()
+    set(_qgc_ffmpeg_video_default ON)
+endif()
+option(QGC_ENABLE_FFMPEG_VIDEOSTREAMING "Enable GC FFmpeg Video Receiver (G88)" ${_qgc_ffmpeg_video_default})
 
 # MAVLink
 set(QGC_MAVLINK_GIT_REPO "https://github.com/mavlink/c_library_v2.git" CACHE STRING "URL to MAVLink Git Repo")

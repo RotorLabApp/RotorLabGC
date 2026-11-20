@@ -5,6 +5,7 @@
  ****************************************************************************/
 
 #include "LogCollector.h"
+#include "LogCollectPolicy.h"
 
 #include <limits>
 
@@ -98,6 +99,10 @@ LogCollector::LogCollector(QObject *parent)
     _watchdogTimer.setInterval(kWatchdogMs);
     connect(&_watchdogTimer, &QTimer::timeout, this, &LogCollector::_watchdog);
 
+    _settleTimer.setSingleShot(true);
+    _settleTimer.setInterval(LogCollectPolicy::kSettleIntervalMs);
+    connect(&_settleTimer, &QTimer::timeout, this, &LogCollector::_relist);
+
     // Abandon a collection the moment anything arms. Pulling a log floods the
     // same link that carries control, and the crew flying again outranks any
     // file.
@@ -112,7 +117,7 @@ LogCollector::LogCollector(QObject *parent)
         connect(v, &Vehicle::armedChanged, this, [this](bool armed) {
             if (armed && _busy) {
                 emit logMessage(tr("aircraft armed - stopping the log download"));
-                cancel();
+                _abort(tr("the aircraft armed"), true);
             }
         });
     };
@@ -168,6 +173,19 @@ QString LogCollector::findOnDisk(double endedAt, double durationS, qint64 maxByt
 }
 
 // ----------------------------------------------------------------- preflight
+
+bool LogCollector::anyAircraftArmed()
+{
+    MultiVehicleManager *const mvm = MultiVehicleManager::instance();
+    QmlObjectListModel *const list = mvm ? mvm->vehicles() : nullptr;
+    for (int i = 0; list && i < list->count(); ++i) {
+        Vehicle *const v = qobject_cast<Vehicle *>((*list)[i]);
+        if (v && (v->armed() || v->flying())) {
+            return true;
+        }
+    }
+    return false;
+}
 
 bool LogCollector::canCollect(QString *whyNot) const
 {
@@ -235,30 +253,39 @@ QString LogCollector::_newFileInDir() const
     return {};
 }
 
+void LogCollector::_reject(const QString &why, bool armed)
+{
+    // Nothing was started, so _finish() does not apply. Still logged: a reason
+    // nobody can see is how G98 F-3 went unexplained.
+    qCWarning(LogCollectorLog) << "log collection not started:" << why
+                               << (armed ? "(aircraft armed; not an attempt)" : "");
+    emit failed(why, true, armed);
+}
+
 void LogCollector::collect(int sysid, double endedAt, double durationS, qint64 maxBytes)
 {
     QString whyNot;
     if (!canCollect(&whyNot)) {
-        emit failed(whyNot, true);
+        _reject(whyNot, anyAircraftArmed());
         return;
     }
     LogDownloadController *const ldc = LogDownloadController::instance();
     MultiVehicleManager *const mvm = MultiVehicleManager::instance();
     Vehicle *const v = mvm ? mvm->activeVehicle() : nullptr;
     if (!ldc || !v) {
-        emit failed(tr("no aircraft connected"), true);
+        _reject(tr("no aircraft connected"), false);
         return;
     }
     // The controller only ever talks to the active vehicle, so a log for a
     // different SysID has to wait until that aircraft is the active one.
     if (sysid != 0 && v->id() != sysid) {
-        emit failed(tr("vehicle %1 is not the active aircraft").arg(sysid), true);
+        _reject(tr("vehicle %1 is not the active aircraft").arg(sysid), false);
         return;
     }
 
     _dir = logDir();
     if (_dir.isEmpty()) {
-        emit failed(tr("no log folder is set in General settings"), true);
+        _reject(tr("no log folder is set in General settings"), false);
         return;
     }
 
@@ -268,12 +295,47 @@ void LogCollector::collect(int sysid, double endedAt, double durationS, qint64 m
     _durationS = durationS;
     _maxBytes  = maxBytes;
     _idleTicks = 0;
+    _armedRefusal = false;
+    _pickId    = -1;
+    _pickSize  = -1;
     _snapshot();
+
+    // ArduPilot refuses a listing while it still counts itself armed, and says
+    // so only in a STATUSTEXT.
+    _textConn = connect(v, &Vehicle::textMessageReceived, this,
+                        [this](int, int, int, const QString &text, const QString &) {
+        if (_busy && LogCollectPolicy::isDisarmRefusal(text)) {
+            _armedRefusal = true;
+        }
+    });
+
+    qCDebug(LogCollectorLog) << "collecting the log for sysid" << sysid << "ended" << qint64(endedAt);
 
     // Armed BEFORE refresh(), which starts the listing synchronously.
     _listConn = connect(ldc, &LogDownloadController::requestingListChanged,
                         this, &LogCollector::_onListChanged);
     _watchdogTimer.start();
+    _settleClock.start();
+    ldc->refresh();
+}
+
+void LogCollector::_relist()
+{
+    if (!_busy) {
+        return;
+    }
+    LogDownloadController *const ldc = LogDownloadController::instance();
+    if (!ldc) {
+        _finish({}, tr("no log download available"), true);
+        return;
+    }
+    if (anyAircraftArmed()) {
+        _finish({}, tr("the aircraft armed"), true, true);
+        return;
+    }
+    _idleTicks = 0;
+    _listConn = connect(ldc, &LogDownloadController::requestingListChanged,
+                        this, &LogCollector::_onListChanged);
     ldc->refresh();
 }
 
@@ -285,6 +347,17 @@ void LogCollector::_onListChanged()
     }
     QObject::disconnect(_listConn);
     _idleTicks = 0;
+
+    // An armed aircraft lists nothing. That says nothing about the log, so it
+    // is reported as armed and the caller waits for the disarm.
+    if (_armedRefusal) {
+        _finish({}, tr("the aircraft said \"Disarm for log download\""), true, true);
+        return;
+    }
+    if (anyAircraftArmed()) {
+        _finish({}, tr("the aircraft is armed"), true, true);
+        return;
+    }
 
     const qint64 ended = qint64(_endedAt);
     const qint64 from  = ended - kMatchBeforeEndS;
@@ -332,6 +405,23 @@ void LogCollector::_onListChanged()
         return;
     }
 
+    // The open log keeps growing for a while after disarm. List again until
+    // its size holds still, or until the cap, so the download is not cut short.
+    const int    id   = int(pick->id());
+    const qint64 size = qint64(pick->size());
+    const LogCollectPolicy::SettleStep step =
+        LogCollectPolicy::settle(id == _pickId ? _pickSize : -1, size, _settleClock.elapsed());
+    _pickId   = id;
+    _pickSize = size;
+    if (step == LogCollectPolicy::SettleStep::ListAgain) {
+        qCDebug(LogCollectorLog) << "log" << id << "is" << size << "bytes; listing again in"
+                                 << LogCollectPolicy::kSettleIntervalMs << "ms";
+        _settleTimer.start();
+        return;
+    }
+    qCDebug(LogCollectorLog) << "downloading log" << id << "at" << size << "bytes after"
+                             << _settleClock.elapsed() << "ms";
+
     _dlConn = connect(ldc, &LogDownloadController::downloadingLogsChanged,
                       this, &LogCollector::_onDownloadChanged);
     pick->setSelected(true);
@@ -361,7 +451,7 @@ void LogCollector::_watchdog()
     LogDownloadController *const ldc = LogDownloadController::instance();
     const bool active = ldc && (ldc->property("downloadingLogs").toBool()
                                 || ldc->property("requestingList").toBool());
-    if (active) {
+    if (active || _settleTimer.isActive()) {
         _idleTicks = 0;
         return;
     }
@@ -375,13 +465,21 @@ void LogCollector::_watchdog()
 
 void LogCollector::cancel()
 {
+    _abort(tr("the log download was stopped"), false);
+}
+
+void LogCollector::_abort(const QString &why, bool armed)
+{
     if (!_busy) {
         return;
     }
+    // Ours first, so the controller's own state change on cancel() does not
+    // reach the handlers above.
+    _disconnectController();
     if (LogDownloadController *ldc = LogDownloadController::instance()) {
         ldc->cancel();          // deletes the partial file
     }
-    _finish({}, tr("the log download was stopped"), true);
+    _finish({}, why, true, armed);
 }
 
 void LogCollector::_disconnectController()
@@ -390,22 +488,31 @@ void LogCollector::_disconnectController()
     // happens to have on those signals.
     QObject::disconnect(_listConn);
     QObject::disconnect(_dlConn);
+    QObject::disconnect(_textConn);
 }
 
-void LogCollector::_finish(const QString &path, const QString &why, bool retryable)
+void LogCollector::_finish(const QString &path, const QString &why, bool retryable, bool armed)
 {
     if (!_busy) {
         return;                 // exactly one of collected()/failed(), ever
     }
     _busy = false;
     _watchdogTimer.stop();
+    _settleTimer.stop();
     _idleTicks = 0;
+    _armedRefusal = false;
+    _pickId   = -1;
+    _pickSize = -1;
     _disconnectController();
     _before.clear();
 
     if (!path.isEmpty()) {
+        qCDebug(LogCollectorLog) << "collected" << path;
         emit collected(path);
     } else {
-        emit failed(why, retryable);
+        qCWarning(LogCollectorLog) << "log collection failed:" << why
+                                   << (retryable ? "(retryable)" : "(not retryable)")
+                                   << (armed ? "(aircraft armed; not an attempt)" : "");
+        emit failed(why, retryable, armed);
     }
 }

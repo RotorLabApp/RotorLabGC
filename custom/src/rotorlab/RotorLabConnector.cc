@@ -174,6 +174,38 @@ QString RotorLabConnector::keyStoreName() const
     return Credential::storeName();
 }
 
+QString RotorLabConnector::keyStorageText() const
+{
+    const QString account = RotorLabStore::keyAccount();
+    return keyStorageTextFor(Credential::fileCopy(account), Credential::inOsStore(),
+                             !Credential::load(account).isEmpty(), Credential::storeName());
+}
+
+QString RotorLabConnector::keyStorageTextFor(Credential::FileCopy fileCopy, bool inOsStore, bool haveKey,
+                                             const QString &storeName)
+{
+    switch (fileCopy) {
+    case Credential::FileCopy::Moved:
+        return tr("Device Key saved in %1. The readable copy that an earlier version kept in the "
+                  "settings file has been deleted.").arg(storeName);
+    case Credential::FileCopy::Removed:
+        return inOsStore
+            ? tr("The readable copy of your Device Key that an earlier version kept in the settings "
+                 "file has been deleted. It was not used, because %1 did not accept it. Enter the key "
+                 "again to save it in %1.").arg(storeName)
+            : tr("The readable copy of your Device Key that an earlier version kept in the settings "
+                 "file has been deleted. It was not used. GC found no system key store on this "
+                 "device, so enter the key again: GC keeps it for this session only.");
+    case Credential::FileCopy::None:
+        break;
+    }
+    if (haveKey && !inOsStore) {
+        return tr("Device Key kept for this session only. GC found no system key store on this device, "
+                  "so the key is not saved. Enter it again after a restart to keep sending flight records to RotorLab.");
+    }
+    return {};
+}
+
 QString RotorLabConnector::maskedKey() const
 {
     const QString key = Credential::load(RotorLabStore::keyAccount());
@@ -441,10 +473,16 @@ void RotorLabConnector::setKeyAndVerify(const QString &key)
     }
     _armedKeyRefusal.clear();
 
-    if (!Credential::store(RotorLabStore::keyAccount(), typed)) {
+    if (!Credential::inOsStore()) {
+        // G82: no system key store. Never the settings file: the key is kept
+        // for this session only, as the TAK password is, and keyStorageText
+        // says so.
+        Credential::keepForSession(RotorLabStore::keyAccount(), typed);
+        _log(QStringLiteral("Device Key kept for this session only: no system key store, not saved"));
+    } else if (!Credential::store(RotorLabStore::keyAccount(), typed)) {
         // Fail closed. If the credential store refused it we do not quietly
         // write the key somewhere less safe instead.
-        _setError(tr("The key could not be saved to the %1.").arg(keyStoreName()));
+        _setError(tr("The key could not be saved in %1.").arg(keyStoreName()));
         return;
     }
 

@@ -107,7 +107,8 @@ public slots:
     QLocale getCurrentLanguage() const { return _locale; }
 
     /// Show non-modal vehicle message to the user
-    void showCriticalVehicleMessage(const QString &message);
+    /// title: banner heading, empty for the default "Vehicle Error" (G83)
+    void showCriticalVehicleMessage(const QString &message, const QString &title = QString());
 
     /// Show modal application message to the user
     void showAppMessage(const QString &message, const QString &title = QString());

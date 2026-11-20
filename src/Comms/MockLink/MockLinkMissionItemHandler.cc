@@ -53,6 +53,7 @@ bool MockLinkMissionItemHandler::handleMessage(const mavlink_message_t &msg)
         break;
     case MAVLINK_MSG_ID_MISSION_ACK:
         // Acks are received back for each MISSION_ITEM message
+        _handleMissionAck(msg);
         break;
     case MAVLINK_MSG_ID_MISSION_SET_CURRENT:
         // Sets the currently active mission item
@@ -249,6 +250,18 @@ void MockLinkMissionItemHandler::_handleMissionCount(const mavlink_message_t &ms
     mavlink_msg_mission_count_decode(&msg, &missionCount);
     Q_ASSERT(missionCount.target_system == _mockLink->vehicleId());
 
+    _missionCountCount++;
+
+    if (_staleTransferType != MAV_MISSION_TYPE_ENUM_END) {
+        // PX4 v1.15.4 mavlink_mission.cpp handle_mission_count, state GETLIST with _transfer_seq > 0:
+        // "WPM: REJ. CMD: Busy" and MISSION_ACK MAV_MISSION_ERROR with the open transfer's mission_type.
+        // The reject goes to the partner of the open transfer (send_mission_ack(_transfer_partner_sysid, ...)), not to the sender.
+        qCDebug(MockLinkMissionItemHandlerLog) << "_handleMissionCount busy with stale transfer of type:partner" << _staleTransferType << _stalePartnerSystemId << _stalePartnerComponentId;
+        _sendAckForType(MAV_MISSION_ERROR, static_cast<MAV_MISSION_TYPE>(_staleTransferType.load()),
+                        static_cast<uint8_t>(_stalePartnerSystemId.load()), static_cast<uint8_t>(_stalePartnerComponentId.load()));
+        return;
+    }
+
     _requestType = (MAV_MISSION_TYPE)missionCount.mission_type;
     _writeSequenceCount = missionCount.count;
     Q_ASSERT(_writeSequenceCount >= 0);
@@ -268,6 +281,11 @@ void MockLinkMissionItemHandler::_handleMissionCount(const mavlink_message_t &ms
     }
 
     if (_writeSequenceCount == 0) {
+        if (_failureMode == FailWriteEmptyListFirstAckLost && _failWriteEmptyListFirstAck) {
+            _failWriteEmptyListFirstAck = false;
+            qCDebug(MockLinkMissionItemHandlerLog) << "_handleMissionCount not acking count 0 due to failure mode FailWriteEmptyListFirstAckLost";
+            return;
+        }
         _sendAck(MAV_MISSION_ACCEPTED);
         return;
     }
@@ -294,6 +312,22 @@ void MockLinkMissionItemHandler::_requestNextMissionItem(int sequenceNumber)
 
     if ((_failureMode == FailWriteRequest1NoResponse) && (sequenceNumber == 1)) {
         qCDebug(MockLinkMissionItemHandlerLog) << "_requestNextMissionItem not responding due to failure mode FailWriteRequest1NoResponse";
+        return;
+    }
+
+    if ((_failureMode == FailWriteRequest1NoResponseStaysBusy) && (sequenceNumber == 1)) {
+        // PX4 stays in MAVLINK_WPM_STATE_GETLIST with seq 1 until cancelled or its 5 s timeout
+        qCDebug(MockLinkMissionItemHandlerLog) << "_requestNextMissionItem not responding, upload stays open, FailWriteRequest1NoResponseStaysBusy";
+        _stalePartnerSystemId = MAVLinkProtocol::instance()->getSystemId();
+        _stalePartnerComponentId = MAVLinkProtocol::getComponentId();
+        _staleTransferType = _requestType;
+        return;
+    }
+
+    if ((_failureMode == FailWriteRequest1Delayed) && (sequenceNumber == 1) && _failWriteRequest1Delay) {
+        _failWriteRequest1Delay = false;
+        qCDebug(MockLinkMissionItemHandlerLog) << "_requestNextMissionItem delaying MISSION_REQUEST 1 due to failure mode FailWriteRequest1Delayed";
+        QTimer::singleShot(_writeRequestDelayMs, this, [this]() { _requestNextMissionItem(1); });
         return;
     }
 
@@ -329,6 +363,53 @@ void MockLinkMissionItemHandler::_requestNextMissionItem(int sequenceNumber)
 
     // If response with Mission Item doesn't come before timer fires it's an error
     _startMissionItemResponseTimer();
+}
+
+void MockLinkMissionItemHandler::_handleMissionAck(const mavlink_message_t &msg)
+{
+    mavlink_mission_ack_t missionAck{};
+    mavlink_msg_mission_ack_decode(&msg, &missionAck);
+
+    if (missionAck.type == MAV_MISSION_OPERATION_CANCELLED) {
+        if (_dropNextCancel) {
+            _dropNextCancel = false;
+            qCDebug(MockLinkMissionItemHandlerLog) << "_handleMissionAck cancel lost for mission_type" << missionAck.mission_type;
+            return;
+        }
+        _cancelAckCount++;
+        qCDebug(MockLinkMissionItemHandlerLog) << "_handleMissionAck cancel received for mission_type:from" << missionAck.mission_type << msg.sysid << msg.compid;
+        _missionItemResponseTimer.stop();
+        // PX4: only the transfer partner may cancel (otherwise "REJ. WP CMD: partner id mismatch"); then
+        // GETLIST + MAV_MISSION_OPERATION_CANCELLED -> switch_to_idle_state, _transfer_in_progress = false
+        if ((missionAck.mission_type == _staleTransferType) && (msg.sysid == _stalePartnerSystemId) && (msg.compid == _stalePartnerComponentId)) {
+            _staleTransferType = MAV_MISSION_TYPE_ENUM_END;
+        }
+    }
+}
+
+void MockLinkMissionItemHandler::setBusyStaleTransfer(MAV_MISSION_TYPE staleType, int partnerSystemId, int partnerComponentId)
+{
+    _stalePartnerSystemId = (partnerSystemId < 0) ? MAVLinkProtocol::instance()->getSystemId() : partnerSystemId;
+    _stalePartnerComponentId = (partnerComponentId < 0) ? MAVLinkProtocol::getComponentId() : partnerComponentId;
+    _staleTransferType = staleType;
+}
+
+void MockLinkMissionItemHandler::_sendAckForType(MAV_MISSION_RESULT ackType, MAV_MISSION_TYPE missionType, uint8_t targetSystem, uint8_t targetComponent) const
+{
+    mavlink_message_t message{};
+    (void) mavlink_msg_mission_ack_pack_chan(
+        _mockLink->vehicleId(),
+        MAV_COMP_ID_AUTOPILOT1,
+        _mockLink->mavlinkChannel(),
+        &message,
+        targetSystem,
+        targetComponent,
+        ackType,
+        missionType,
+        0
+    );
+
+    _mockLink->respondWithMavlinkMessage(message);
 }
 
 void MockLinkMissionItemHandler::_sendAck(MAV_MISSION_RESULT ackType) const
@@ -429,6 +510,8 @@ void MockLinkMissionItemHandler::setFailureMode(FailureMode_t failureMode, MAV_M
 {
     _failureMode = failureMode;
     _failureAckResult = failureAckResult;
+    _failWriteEmptyListFirstAck = true;
+    _failWriteRequest1Delay = true;
 }
 
 void MockLinkMissionItemHandler::shutdown()

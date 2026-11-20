@@ -42,9 +42,16 @@ target_sources(${CMAKE_PROJECT_NAME}
         VideoSettings.h
         MapsSettings.cc
         MapsSettings.h
-        Viewer3DSettings.cc
-        Viewer3DSettings.h
 )
+
+# RotorLab G87: Viewer3DSettings exists only with the old viewer (never in GC).
+if(QGC_VIEWER3D)
+    target_sources(${CMAKE_PROJECT_NAME}
+        PRIVATE
+            Viewer3DSettings.cc
+            Viewer3DSettings.h
+    )
+endif()
 
 if(NOT QGC_DISABLE_APM_MAVLINK)
     target_sources(${CMAKE_PROJECT_NAME}

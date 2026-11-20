@@ -28,6 +28,7 @@
 #include "LinkInterface.h"
 #include "MAVLinkProtocol.h"
 #include "QGCVideoStreamInfo.h"
+#include "VideoReceiver.h"
 
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtCore/QDir>
@@ -1619,7 +1620,7 @@ VehicleCameraControl::handleCaptureStatus(const mavlink_camera_capture_status_t&
 void
 VehicleCameraControl::handleVideoInfo(const mavlink_video_stream_information_t* vi)
 {
-    qCDebug(CameraControlLog) << "handleVideoInfo:" << vi->stream_id << vi->uri;
+    qCDebug(CameraControlLog) << "handleVideoInfo:" << vi->stream_id << VideoReceiver::redactedUri(QString::fromUtf8(vi->uri, qstrnlen(vi->uri, sizeof(vi->uri))));
     _expectedCount = vi->count;
     if(!_findStream(vi->stream_id, false)) {
         qCDebug(CameraControlLog) << "Create stream handler for stream ID:" << vi->stream_id;
@@ -1708,7 +1709,7 @@ VehicleCameraControl::setCurrentStream(int stream)
     if (stream != _currentStream && stream >= 0 && stream < _streamLabels.count()) {
         QGCVideoStreamInfo* pInfo = currentStreamInstance();
         if(pInfo) {
-            qCDebug(CameraControlLog) << "Stopping stream:" << pInfo->uri();
+            qCDebug(CameraControlLog) << "Stopping stream:" << VideoReceiver::redactedUri(pInfo->uri());
             //-- Stop current stream
             _vehicle->sendMavCommand(
                 _compID,                                // Target component
@@ -1720,7 +1721,7 @@ VehicleCameraControl::setCurrentStream(int stream)
         pInfo = currentStreamInstance();
         if(pInfo) {
             //-- Start new stream
-            qCDebug(CameraControlLog) << "Starting stream:" << pInfo->uri();
+            qCDebug(CameraControlLog) << "Starting stream:" << VideoReceiver::redactedUri(pInfo->uri());
             _vehicle->sendMavCommand(
                 _compID,                                // Target component
                 MAV_CMD_VIDEO_START_STREAMING,          // Command id
@@ -2159,7 +2160,7 @@ VehicleCameraControl::_handleDefinitionFile(const QString &url)
 void
 VehicleCameraControl::_httpRequest(const QString &url)
 {
-    qCDebug(CameraControlLog) << "Request camera definition:" << url;
+    qCDebug(CameraControlLog) << "Request camera definition:" << VideoReceiver::redactedUri(url);
     if(!_netManager) {
         _netManager = new QNetworkAccessManager(this);
     }

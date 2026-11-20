@@ -158,10 +158,22 @@ Rectangle {
                             text:       qsTr("Gimbal Pitch")
                             visible:    missionItem.cameraCalc.isManualCamera
                         }
+                        // G67: ArduPilot does not use the gimbal pitch (G85: ROI at the structure center),
+                        // so it is shown read only there and kept in the plan as read. PX4 unchanged.
                         FactTextField {
                             fact:               missionItem.gimbalPitch
                             Layout.fillWidth:   true
                             visible:            missionItem.cameraCalc.isManualCamera
+                            enabled:            missionItem.gimbalPitchUsed
+                        }
+
+                        QGCLabel {
+                            text:               missionItem.gimbalPitchNote
+                            wrapMode:           Text.WordWrap
+                            font.pointSize:     ScreenTools.smallFontPointSize
+                            Layout.columnSpan:  2
+                            Layout.fillWidth:   true
+                            visible:            missionItem.cameraCalc.isManualCamera && !missionItem.gimbalPitchUsed
                         }
                     }
 

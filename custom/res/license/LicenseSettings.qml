@@ -23,6 +23,21 @@ Rectangle {
 
     property real _pad:        ScreenTools.defaultFontPixelWidth
     property string _pending:  ""
+    // Masked until the user presses Show, and not kept once the
+    // key activates, so a later deactivate shows an empty field.
+    property bool   _reveal:   false
+    property bool   _vehicleConnected: QGroundControl.multiVehicleManager.vehicles.count > 0
+
+    Connections {
+        target: LicenseManager
+        function onActivatedChanged() {
+            if (LicenseManager.activated) {
+                root._pending = ""
+                root._reveal = false
+                keyField.clear()
+            }
+        }
+    }
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
@@ -137,7 +152,7 @@ Rectangle {
                 GridLayout {
                     id:                 keyRow
                     Layout.fillWidth:   true
-                    columns:            page.narrow ? 1 : 3
+                    columns:            page.narrow ? 2 : 4
                     columnSpacing:      _pad * 2
                     rowSpacing:         _pad / 2
                     QGCLabel {
@@ -145,18 +160,24 @@ Rectangle {
                         Layout.alignment:       Qt.AlignVCenter
                         Layout.fillWidth:       page.narrow
                         Layout.preferredWidth:  page.narrow ? -1 : page.labelColumnWidth(keyRow.width)
+                        Layout.columnSpan:      page.narrow ? 2 : 1
                         wrapMode:               Text.WordWrap
                     }
                     TextField {
                         id:                     keyField
+                        objectName:             "licenseSettingsKeyField"
                         Layout.fillWidth:       true
                         Layout.minimumWidth:    ScreenTools.defaultFontPixelWidth * 8
-                        Layout.maximumWidth:    page.fieldMaxWidthFor(keyRow.width, keyRow.columnSpacing * 2)
+                        Layout.maximumWidth:    page.fieldMaxWidthFor(keyRow.width,
+                                                                      keyRow.columnSpacing * 3 + revealButton.width)
                         Layout.preferredWidth:  Layout.maximumWidth
                         Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 2
                         color:                  page.inputTextColor
                         text:                   _pending
+                        echoMode:               _reveal ? TextInput.Normal : TextInput.Password
+                        inputMethodHints:       Qt.ImhSensitiveData | Qt.ImhNoPredictiveText | Qt.ImhNoAutoUppercase
                         placeholderText:        qsTr("XXXX-XXXX-XXXX-XXXX")
+                        Accessible.name:        qsTr("License key")
                         placeholderTextColor:   page.placeholderColor
                         selectByMouse:          true
                         selectionColor:         page.focusColor
@@ -170,6 +191,27 @@ Rectangle {
                             border.color: keyField.activeFocus ? page.focusColor : page.inputBorderColor
                         }
                         cursorDelegate: Rectangle { width: 2; color: page.focusColor; visible: keyField.cursorVisible }
+                    }
+                    QGCButton {
+                        id:        revealButton
+                        text:      _reveal ? qsTr("Hide") : qsTr("Show")
+                        // Reachable with Tab so a keyboard user can check the key.
+                        focusPolicy:     Qt.StrongFocus
+                        checkable:       true
+                        checked:         root._reveal
+                        Accessible.name: root._reveal ? qsTr("Hide license key") : qsTr("Show license key")
+                        onClicked:       _reveal = !_reveal
+
+                        // Visible focus mark for Tab users (QGCButton draws none).
+                        Rectangle {
+                            anchors.fill:   parent
+                            z:              1
+                            color:          "transparent"
+                            radius:         revealButton.backRadius
+                            border.width:   2
+                            border.color:   "#4D8BFF"
+                            visible:        revealButton.activeFocus
+                        }
                     }
                     Item { Layout.fillWidth: true; visible: !page.narrow }
                 }
@@ -199,11 +241,21 @@ Rectangle {
                     text: qsTr("Without a connection, an organization admin can release this key in RotorLab: " +
                                "Organization, Billing, Product licenses, then Release on this device's activation.")
                 }
+                // Deactivating raises the gate, and GC opens no vehicle link
+                // behind it, so it waits until no vehicle is connected.
+                QGCLabel {
+                    objectName: "licenseDeactivateBlocked"
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: LicenseManager.deactivateVehicleText
+                    visible: root._vehicleConnected
+                }
                 RowLayout {
                     Layout.fillWidth: true
                     QGCButton {
+                        objectName: "licenseDeactivate"
                         text: qsTr("Deactivate this device")
-                        enabled: !LicenseManager.busy
+                        enabled: !LicenseManager.busy && !root._vehicleConnected
                         onClicked: LicenseManager.deactivate()
                     }
                     QGCButton {

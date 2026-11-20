@@ -4,7 +4,9 @@ target_sources(${CMAKE_PROJECT_NAME}
         CameraSectionTest.cc CameraSectionTest.h
         CorridorScanComplexItemTest.cc CorridorScanComplexItemTest.h
         FWLandingPatternTest.cc FWLandingPatternTest.h
+        GeoFenceBreachReturnTest.cc GeoFenceBreachReturnTest.h
         LandingComplexItemTest.cc LandingComplexItemTest.h
+        LandingSequenceTest.cc LandingSequenceTest.h
         MissionCommandTreeEditorTest.cc MissionCommandTreeEditorTest.h
         MissionCommandTreeTest.cc MissionCommandTreeTest.h
         MissionControllerManagerTest.cc MissionControllerManagerTest.h
@@ -12,6 +14,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         MissionItemTest.cc MissionItemTest.h
         MissionManagerTest.cc MissionManagerTest.h
         MissionSettingsTest.cc MissionSettingsTest.h
+        PlanCorpusRoundTripTest.cc PlanCorpusRoundTripTest.h
+        PlanManagerTransferTest.cc PlanManagerTransferTest.h
         PlanMasterControllerTest.cc PlanMasterControllerTest.h
         QGCMapPolygonTest.cc QGCMapPolygonTest.h
         QGCMapPolylineTest.cc QGCMapPolylineTest.h

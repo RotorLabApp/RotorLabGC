@@ -70,6 +70,7 @@ void LandingComplexItem::_init(void)
 
     connect(stopTakingPhotos(),         &Fact::valueChanged,                                this, &LandingComplexItem::_signalLastSequenceNumberChanged);
     connect(stopTakingVideo(),          &Fact::valueChanged,                                this, &LandingComplexItem::_signalLastSequenceNumberChanged);
+    connect(useDoChangeSpeed(),         &Fact::valueChanged,                                this, &LandingComplexItem::_signalLastSequenceNumberChanged);    // G75
 
     connect(this,                       &LandingComplexItem::altitudesAreRelativeChanged,   this, &LandingComplexItem::_amslEntryAltChanged);
     connect(this,                       &LandingComplexItem::altitudesAreRelativeChanged,   this, &LandingComplexItem::_amslExitAltChanged);
@@ -318,8 +319,12 @@ int LandingComplexItem::lastSequenceNumber(void) const
     // Fixed items are:
     //  land start, loiter, land
     // Optional items are:
-    //  stop photos/video
-    return _sequenceNumber + 2 + (stopTakingPhotos()->rawValue().toBool() ? 2 : 0) + (stopTakingVideo()->rawValue().toBool() ? 1 : 0);
+    //  change speed, stop photos/video
+    // RotorLab GC 5.1.2 (G75): count the DO_CHANGE_SPEED item appendMissionItems() emits when useDoChangeSpeed
+    // is on. Upstream left it out, so the next item reused the landing's last sequence number.
+    return _sequenceNumber + 2 +
+           (useDoChangeSpeed()->rawValue().toBool() ? 1 : 0) +
+           (stopTakingPhotos()->rawValue().toBool() ? 2 : 0) + (stopTakingVideo()->rawValue().toBool() ? 1 : 0);
 }
 
 void LandingComplexItem::appendMissionItems(QList<MissionItem*>& items, QObject* missionItemParent)

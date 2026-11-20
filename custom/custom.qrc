@@ -22,6 +22,12 @@
         <file alias="QGroundControl/AppSettings/LicenseSettings.qml">res/license/LicenseSettings.qml</file>
         <file alias="QGroundControl/AppSettings/FleetConnectorSettings.qml">res/fleet/FleetConnectorSettings.qml</file>
         <file alias="QGroundControl/AppSettings/RotorLabConnectorSettings.qml">res/rotorlab/RotorLabConnectorSettings.qml</file>
+        <file alias="QGroundControl/AppSettings/VideoSettingsPage.qml">res/video/VideoSettingsPage.qml</file>
+    </qresource>
+    <!-- G95/G109 video recording and relay: settings sections and the Fly view status chips -->
+    <qresource prefix="/custom/video">
+        <file alias="VideoRecordSettings.qml">res/video/VideoRecordSettings.qml</file>
+        <file alias="VideoRecordStatus.qml">res/video/VideoRecordStatus.qml</file>
     </qresource>
     <!-- License startup gate overlay (referenced directly by MainWindow) -->
     <qresource prefix="/custom/license">
@@ -30,6 +36,7 @@
     <!-- TAK remote command banner (referenced directly by MainWindow) -->
     <qresource prefix="/custom/tak">
         <file alias="RemoteCommandBanner.qml">res/tak/RemoteCommandBanner.qml</file>
+        <file alias="CommandDropLine.qml">res/tak/CommandDropLine.qml</file>
     </qresource>
     <!-- Fleet Connector crew screen (referenced directly by MainWindow) -->
     <qresource prefix="/custom/fleet">

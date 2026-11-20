@@ -78,6 +78,13 @@ public:
     /// Reset the state of the MissionItemHandler to no items, no transactions in progress.
     void resetMissionItemHandler() const { _missionItemHandler->reset(); }
 
+    /// PX4 style busy emulation and counters, see MockLinkMissionItemHandler
+    void setMissionBusyStaleTransfer(MAV_MISSION_TYPE staleType, int partnerSystemId = -1, int partnerComponentId = -1) const { _missionItemHandler->setBusyStaleTransfer(staleType, partnerSystemId, partnerComponentId); }
+    void setMissionDropNextCancel(bool drop) const { _missionItemHandler->setDropNextCancel(drop); }
+    bool missionBusyStaleTransfer() const { return _missionItemHandler->busyStaleTransfer(); }
+    int missionCancelAckCount() const { return _missionItemHandler->cancelAckCount(); }
+    int missionCountCount() const { return _missionItemHandler->missionCountCount(); }
+
     /// Returns the filename for the simulated log file. Only available after a download is requested.
     QString logDownloadFile() const { return _logDownloadFilename; }
 

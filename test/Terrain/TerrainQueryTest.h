@@ -89,4 +89,21 @@ private slots:
     void _testRequestPathHeights();
     void _testRequestCarpetHeights();
     // void _testTerrainAtCoordinateQuery();
+
+    // RotorLab GC G76: 2D Plan view leg terrain states (FlightPathSegment), PLAN-CONTRACT.md section 4
+    void _testSegmentStateColors();
+    void _testSegmentSampleDistances();
+    void _testSegmentStrikeMargin();
+    void _testSegmentUnknownGround();
+    void _testSegmentContactSpan();
+    void _testSegmentTerrainFrame();
+    void _testSegmentRuns();
+    void _testSegmentMapPieces();
+    void _testSegmentNotChecked();
+    void _testSegmentItemPoint();
+    void _testSegmentMergeShortRuns();
+    void _testTerrainProfileLegStates();
+    void _testSegmentBoulderLaunchClimb();
+    void _testSegmentTerrainRetry();
+    void _testSegmentRtlUnknown();
 };

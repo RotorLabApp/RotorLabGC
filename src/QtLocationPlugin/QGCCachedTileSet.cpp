@@ -218,7 +218,15 @@ void QGCCachedTileSet::_networkReplyFinished()
 
     const QString type = UrlFactory::tileHashToType(hash);
     const SharedMapProvider mapProvider = UrlFactory::getMapProviderFromProviderType(type);
-    Q_CHECK_PTR(mapProvider);
+    if (!mapProvider) {
+        // A pending row under a key no provider owns: never dereference it, mark it as an error and go on
+        qCWarning(QGCCachedTileSetLog) << Q_FUNC_INFO << "No map provider for tile, dropping it:" << hash;
+        QGCUpdateTileDownloadStateTask* const errorTask = new QGCUpdateTileDownloadStateTask(_id, QGCTile::StateError, hash);
+        getQGCMapEngine()->addTask(errorTask);
+        setErrorCount(_errorCount + 1);
+        _prepareDownload();
+        return;
+    }
 
     if (mapProvider->isElevationProvider()) {
         const SharedElevationProvider elevationProvider = std::dynamic_pointer_cast<const ElevationProvider>(mapProvider);

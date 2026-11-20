@@ -15,10 +15,13 @@
 #include "AppSettings.h"
 #include "PlanMasterController.h"
 #include "FlightPathSegment.h"
+#include "Vehicle.h"
 #include "QGC.h"
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QJsonArray>
+
+#include <cmath>
 
 QGC_LOGGING_CATEGORY(StructureScanComplexItemLog, "StructureScanComplexItemLog")
 
@@ -51,6 +54,10 @@ StructureScanComplexItem::StructureScanComplexItem(PlanMasterController* masterC
     connect(&_startFromTopFact,     &Fact::valueChanged, this, &StructureScanComplexItem::_setDirty);
 
     connect(&_startFromTopFact,     &Fact::valueChanged, this, &StructureScanComplexItem::_signalTopBottomAltChanged);
+    if (_controllerVehicle) {
+        // G67: the Plan view firmware can change; the gimbal pitch field follows it
+        connect(_controllerVehicle, &Vehicle::firmwareTypeChanged, this, &StructureScanComplexItem::gimbalPitchUsedChanged);
+    }
     connect(&_layersFact,           &Fact::valueChanged, this, &StructureScanComplexItem::_signalTopBottomAltChanged);
 
     connect(&_structureHeightFact,                  &Fact::valueChanged,    this, &StructureScanComplexItem::_recalcLayerInfo);
@@ -147,7 +154,7 @@ int StructureScanComplexItem::lastSequenceNumber(void) const
     // Take into account the number of layers
     int multiLayerItemCount = layerItemCount * _layersFact.rawValue().toInt();
 
-    // +2 for ROI_WPNEXT_OFFSET and ROI_NONE commands
+    // +2 for ROI (ROI_WPNEXT_OFFSET, or ROI_LOCATION on ArduPilot) and ROI_NONE commands
     // +2 for entrance/exit waypoints
     int itemCount = multiLayerItemCount + 2 + 2;
 
@@ -235,6 +242,31 @@ bool StructureScanComplexItem::load(const QJsonObject& complexObject, int sequen
     // Load CameraCalc first since it will trigger camera name change which will trounce gimbal angles
     if (!_cameraCalc.load(complexObject[_jsonCameraCalcKey].toObject(), false /* v1FollowTerrain */, errorString, false /* forPresets */)) {
         return false;
+    }
+
+    // RotorLab GC 5.3.0 (G96, PLAN-CONTRACT revision 9, IB-6 bound 3): a structure scan with more than
+    // maxLayers layers is refused at file load, never clamped. The layer count is checked before the
+    // heights and the polygon are set, so an oversized file never builds its flight path. Both the
+    // stored Layers value and the count GC would recompute (CM-6) are checked.
+    {
+        const double storedLayers   = complexObject[layersName].toDouble();
+        const double surfaceHeight  = qMax(complexObject[structureHeightName].toDouble() - complexObject[scanBottomAltName].toDouble(), 0.0);
+        const double footprint      = _cameraCalc.adjustedFootprintFrontal()->rawValue().toDouble();
+        double computedLayers = 1;
+        if (surfaceHeight > 0) {
+            computedLayers = (footprint > 0) ? qMax(std::ceil(surfaceHeight / footprint), 1.0) : qInf();
+        }
+        const double layers = qMax(storedLayers, computedLayers);
+        if (!qIsFinite(layers) || layers > maxLayers) {
+            const QString count = qIsFinite(layers) ? QString::number(layers, 'f', 0) : tr("an unbounded number of");
+            errorString = tr("The structure scan (item %1) has %2 layers, more than the %3 layers %4 loads. "
+                             "Lower the structure height or raise the frontal image spacing in the plan file, then load the file again.")
+                              .arg(sequenceNumber)
+                              .arg(count)
+                              .arg(maxLayers)
+                              .arg(qgcApp()->applicationName());
+            return false;
+        }
     }
 
     _scanBottomAltFact.setRawValue      (complexObject[scanBottomAltName].toDouble());
@@ -330,16 +362,46 @@ void StructureScanComplexItem::appendMissionItems(QList<MissionItem*>& items, QO
     items.append(item);
 
     // Point camera at structure
-    item = new MissionItem(seqNum++,
-                           MAV_CMD_DO_SET_ROI_WPNEXT_OFFSET,
-                           MAV_FRAME_MISSION,
-                           0, 0, 0, 0,                             // param 1-4 not used
-                           _gimbalPitchFact.rawValue().toDouble(),
-                           0,                                      // Roll stays in standard orientation
-                           90,                                     // 90 degreee yaw offset to point to structure
-                           true,                                   // autoContinue
-                           false,                                  // isCurrentItem
-                           missionItemParent);
+    if (_controllerVehicle && _controllerVehicle->apmFirmware()) {
+        // ArduPilot does not support MAV_CMD_DO_SET_ROI_WPNEXT_OFFSET (196): AP_Mission rejects it
+        // with MAV_MISSION_UNSUPPORTED and the whole upload fails. Use MAV_CMD_DO_SET_ROI_LOCATION (195)
+        // at the structure center instead, at the middle of the scanned band. Copter then yaws (or pans
+        // the gimbal) toward the structure for the whole scan. The item count stays the same.
+        // Vertex mean, computed here: QGCMapPolygon::center() is updated by a compressed signal and can lag
+        const QList<QGeoCoordinate> structureVertices = _structurePolygon.coordinateList();
+        QGeoCoordinate roiCoord = _flightPolygon.vertexCoordinate(_entryVertex);
+        if (!structureVertices.isEmpty()) {
+            double sumLat = 0;
+            double sumLon = 0;
+            for (const QGeoCoordinate& vertex: structureVertices) {
+                sumLat += vertex.latitude();
+                sumLon += vertex.longitude();
+            }
+            roiCoord = QGeoCoordinate(sumLat / structureVertices.count(), sumLon / structureVertices.count());
+        }
+        item = new MissionItem(seqNum++,
+                               MAV_CMD_DO_SET_ROI_LOCATION,
+                               MAV_FRAME_GLOBAL_RELATIVE_ALT,
+                               0,                                      // Gimbal device id: 0 = all/primary
+                               0, 0, 0,                                // param 2-4 not used
+                               roiCoord.latitude(),
+                               roiCoord.longitude(),
+                               (bottomFlightAlt() + topFlightAlt()) / 2.0,
+                               true,                                   // autoContinue
+                               false,                                  // isCurrentItem
+                               missionItemParent);
+    } else {
+        item = new MissionItem(seqNum++,
+                               MAV_CMD_DO_SET_ROI_WPNEXT_OFFSET,
+                               MAV_FRAME_MISSION,
+                               0, 0, 0, 0,                             // param 1-4 not used
+                               _gimbalPitchFact.rawValue().toDouble(),
+                               0,                                      // Roll stays in standard orientation
+                               90,                                     // 90 degreee yaw offset to point to structure
+                               true,                                   // autoContinue
+                               false,                                  // isCurrentItem
+                               missionItemParent);
+    }
     items.append(item);
 
     // Set up for the first layer
@@ -568,6 +630,18 @@ void StructureScanComplexItem::_recalcLayerInfo(void)
 
     // Layer count is calculated from surface and layer heights
     _layersFact.setRawValue(qMax(qCeil(surfaceHeight / _cameraCalc.adjustedFootprintFrontal()->rawValue().toDouble()), 1));
+}
+
+bool StructureScanComplexItem::gimbalPitchUsed(void) const
+{
+    // Same test as the ROI choice in appendMissionItems (G85): ArduPilot points the camera at the
+    // structure center with MAV_CMD_DO_SET_ROI_LOCATION, which carries no gimbal pitch
+    return !(_controllerVehicle && _controllerVehicle->apmFirmware());
+}
+
+QString StructureScanComplexItem::gimbalPitchNote(void) const
+{
+    return tr("Not used on ArduPilot: the camera points at the center of the structure.");
 }
 
 void StructureScanComplexItem::_updateGimbalPitch(void)

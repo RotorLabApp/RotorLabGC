@@ -13,6 +13,7 @@
 #include <QtQuick/QSGGeometryNode>
 #include <QtQuick/QSGGeometry>
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QTimer>
 
 Q_DECLARE_LOGGING_CATEGORY(TerrainProfileLog)
 
@@ -35,6 +36,38 @@ public:
     Q_PROPERTY(double               minAMSLAlt          MEMBER _minAMSLAlt                                  NOTIFY minAMSLAltChanged)
     Q_PROPERTY(double               maxAMSLAlt          MEMBER _maxAMSLAlt                                  NOTIFY maxAMSLAltChanged)
 
+    /// RotorLab GC G76: how many legs of the plan are in each terrain state (FlightPathSegment::TerrainState),
+    /// for the state line of the Plan view terrain profile. A leg is one simple leg or one segment of a pattern.
+    Q_PROPERTY(int                  strikeLegCount      READ strikeLegCount                                 NOTIFY legStatesChanged)
+    Q_PROPERTY(int                  unknownLegCount     READ unknownLegCount                                NOTIFY legStatesChanged)
+    Q_PROPERTY(int                  noStrikeLegCount    READ noStrikeLegCount                               NOTIFY legStatesChanged)
+    /// G76: the length of the profile's distance axis: every drawn leg, including the leg back to launch of an RTL,
+    /// which the mission's total distance leaves out; never less than the mission's total distance.
+    Q_PROPERTY(double               profileDistance     READ profileDistance                                NOTIFY profileDistanceChanged)
+
+    double profileDistance(void) const { return _profileDistance; }
+
+    int strikeLegCount  (void) const { return _strikeLegCount; }
+    int unknownLegCount (void) const { return _unknownLegCount; }
+    int noStrikeLegCount(void) const { return _noStrikeLegCount; }
+
+    struct LegStateCounts {
+        int strike   = 0;   ///< TerrainStrike
+        int unknown  = 0;   ///< TerrainUnknown
+        int noStrike = 0;   ///< TerrainNoStrike and TerrainGroundContact (the contact of a takeoff or landing is not a strike)
+    };
+    /// Counts the legs by state; TerrainNotChecked legs (no terrain query) are not counted.
+    static LegStateCounts countLegStates(const QList<FlightPathSegment*>& segments);
+    /// The profile's distance axis length for legs drawn over `drawnDistance` meters in a mission whose total
+    /// distance is `missionTotalDistance` (NaN when unknown).
+    static double profileDistanceFor(double drawnDistance, double missionTotalDistance);
+    /// The map's color for a leg state (FlightPathSegment::terrainStateColor, the 3D views' colors) as "#rrggbb",
+    /// so the state line shows the same colors as the map.
+    Q_INVOKABLE QString terrainStateColorName(int state, bool darkTheme) const;
+
+    /// Test entry: how many repaints the profile has asked for since it was created
+    int paintRequestCountForTest(void) const { return _paintRequestCount; }
+
     MissionController*  missionController(void) { return _missionController; }
 
     void setMissionController(MissionController* missionController);
@@ -52,9 +85,13 @@ signals:
     void minAMSLAltChanged          (void);
     void maxAMSLAltChanged          (void);
     void _updateSignal              (void);
+    void legStatesChanged           (void);
+    void profileDistanceChanged     (void);
 
 private slots:
     void _newVisualItems            (void);
+    void _updateLegStates           (void);
+    void _requestPaint              (void);
 
 private:
     void    _createGeometry                 (QSGGeometryNode*& geometryNode, QSGGeometry*& geometry, QSGGeometry::DrawingMode drawingMode, const QColor& color);
@@ -72,6 +109,12 @@ private:
     double              _pixelsPerMeter =       0;
     double              _minAMSLAlt =           0;
     double              _maxAMSLAlt =           0;
+    int                 _strikeLegCount =       0;
+    int                 _unknownLegCount =      0;
+    int                 _noStrikeLegCount =     0;
+    double              _profileDistance =      0;
+    int                 _paintRequestCount =    0;
+    QTimer              _legStatesTimer;
 
     static const int _lineWidth =       7;
 

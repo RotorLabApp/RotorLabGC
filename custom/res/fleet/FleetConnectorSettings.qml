@@ -338,6 +338,16 @@ Rectangle {
                     text: FleetConnector.statusText
                 }
 
+                // G40: joining closed the direct TAK link (its page is now
+                // hidden) and turned its command switch off.
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    visible: TAKManager.fleetHandOffNotice.length > 0
+                    color: _noteColor       // information, not a fault
+                    text: TAKManager.fleetHandOffNotice
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
                     QGCButton { text: qsTr("Refresh now"); onClicked: FleetConnector.refreshNow() }

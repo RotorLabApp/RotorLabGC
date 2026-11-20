@@ -35,11 +35,29 @@ endif()
 #     execute_process(COMMAND chmod a+x "${LD_GSTPLUGIN_PATH}")
 # endif()
 
+# RotorLab: G72/G73. Also drop any GLib copy an earlier install step put in the AppDir
+# (see the --exclude-library lines below for why GLib must come from the system).
+file(GLOB _rl_glib_libs "${APPDIR_PATH}/usr/lib/libglib-2.0.so*" "${APPDIR_PATH}/usr/lib/libgobject-2.0.so*"
+     "${APPDIR_PATH}/usr/lib/libgio-2.0.so*" "${APPDIR_PATH}/usr/lib/libgmodule-2.0.so*" "${APPDIR_PATH}/usr/lib/libgthread-2.0.so*")
+if(_rl_glib_libs)
+    file(REMOVE ${_rl_glib_libs})
+endif()
+
 execute_process(COMMAND ${LD_PATH}
     --appdir ${APPDIR_PATH}
     --executable ${APPDIR_PATH}/usr/bin/${CMAKE_PROJECT_NAME}
     --desktop-file ${APPDIR_PATH}/usr/share/applications/org.mavlink.qgroundcontrol.desktop
-    --custom-apprun ${CMAKE_BINARY_DIR}/AppRun)
+    --custom-apprun ${CMAKE_BINARY_DIR}/AppRun
+    # RotorLab: G72/G73. GLib comes from the system, never the AppImage. A bundled
+    # libglib from the build host (Ubuntu 22.04, GLib 2.72) is older than the
+    # system's libgobject and libgio on newer releases (Ubuntu 24.04, 2.80), so
+    # the system libsecret could not load and GC fell back to "no Secret Service".
+    # GLib keeps backward ABI compatibility, so the system copy serves Qt too.
+    --exclude-library "libglib-2.0.so*"
+    --exclude-library "libgobject-2.0.so*"
+    --exclude-library "libgio-2.0.so*"
+    --exclude-library "libgmodule-2.0.so*"
+    --exclude-library "libgthread-2.0.so*")
 # --exclude-library "libgst*"
 # --plugin qt --plugin gtk --plugin gstreamer
 

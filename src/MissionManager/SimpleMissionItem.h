@@ -168,6 +168,7 @@ private slots:
     void _possibleRadiusChanged                 (void);
 
 private:
+    bool _checkNullNumbers      (QString& errorString) const;   // RotorLab GC 5.3.0 (G96)
     void _connectSignals        (void);
     void _setupMetaData         (void);
     void _updateOptionalSections(void);

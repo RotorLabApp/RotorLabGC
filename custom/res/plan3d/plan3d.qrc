@@ -1,0 +1,15 @@
+<RCC>
+    <!-- G64: Plan view 3D, Windows and Linux builds only (custom/CMakeLists.txt) -->
+    <qresource prefix="/rotorlab/plan3d">
+        <file alias="Plan3DView.qml">Plan3DView.qml</file>
+        <file alias="Plan3DCameraRig.qml">Plan3DCameraRig.qml</file>
+        <file alias="Plan3DGroundLayer.qml">Plan3DGroundLayer.qml</file>
+        <file alias="Plan3DLegend.qml">Plan3DLegend.qml</file>
+        <file alias="Plan3DLine.vert">Plan3DLine.vert</file>
+        <file alias="Plan3DLine.frag">Plan3DLine.frag</file>
+        <file alias="Plan3DMarker.vert">Plan3DMarker.vert</file>
+        <file alias="Plan3DMarker.frag">Plan3DMarker.frag</file>
+        <file alias="Plan3DGround.vert">Plan3DGround.vert</file>
+        <file alias="Plan3DGround.frag">Plan3DGround.frag</file>
+    </qresource>
+</RCC>

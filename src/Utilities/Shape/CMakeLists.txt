@@ -22,6 +22,10 @@ CPMAddPackage(
         "BUILD_SHAPELIB_CONTRIB OFF"
         "BUILD_APPS OFF"
         "BUILD_TESTING OFF"
+    # RotorLab: G108. Built and linked into GC only: EXCLUDE_FROM_ALL keeps its
+    # install rules (static library, header, CMake and pkg-config files) out of
+    # the release files.
+    EXCLUDE_FROM_ALL YES
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE shp)

@@ -9,6 +9,7 @@
 #include "FleetLogs.h"
 #include "FleetStore.h"
 #include "FleetTelemetry.h"
+#include "tak/TakManager.h"
 
 #include "MultiVehicleManager.h"
 #include "QmlObjectListModel.h"
@@ -106,7 +107,32 @@ FleetConnector::FleetConnector(QObject *parent)
     _telemetryTimer.setInterval(1000);
     connect(&_telemetryTimer, &QTimer::timeout, this, &FleetConnector::_telemetryTick);
 
+    // G40: when the Fleet Server becomes the route to ATAK, the TAK page is
+    // hidden, so the direct TAK link is closed and its command switch turned
+    // off. Checked at every state change, including the first one below.
+    connect(this, &FleetConnector::stateChanged, this, &FleetConnector::_takHandOff);
+
     _loadFromStore();
+    _takHandOff();
+}
+
+int FleetConnector::takRouteEdge(bool wasRoute, bool enrolled, bool suspended)
+{
+    const bool isRoute = enrolled && !suspended;
+    if (isRoute == wasRoute) {
+        return 0;
+    }
+    return isRoute ? 1 : -1;
+}
+
+void FleetConnector::_takHandOff()
+{
+    const int edge = takRouteEdge(_takRoute, enrolled(), _suspended);
+    if (edge == 0) {
+        return;
+    }
+    _takRoute = edge > 0;
+    TakManager::fleetRouteChanged(_takRoute);
 }
 
 FleetConnector::~FleetConnector() = default;
@@ -1005,7 +1031,7 @@ bool FleetConnector::_handleCommon(const FleetReply &r)
     if (r.status == 401) {
         // An administrator revoked this station. Stop reporting, say so, and
         // do NOT retry in a loop.
-        _setError(tr("This ground station was removed from the RotorLab Server."));
+        _setError(tr("This ground station was removed from the Fleet Server."));
         _setState(Revoked);
         return false;
     }

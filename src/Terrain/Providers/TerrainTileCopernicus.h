@@ -30,6 +30,11 @@ public:
     static QByteArray serializeFromData(const QByteArray &input);
     static QJsonValue getJsonFromData(const QByteArray &input);
 
+    /// Height in meters from a JSON value, NaN (unknown) if the value is null, missing or not a number.
+    static double heightFromJson(const QJsonValue &value);
+    /// Rounds a height to the nearest meter for the int16 tile grid. NaN or out of range becomes kUnknownElevation.
+    static int16_t toTileElevation(double height);
+
     static constexpr double kTileSizeDegrees = 0.01;                ///< Each terrain tile represents a square area .01 degrees in lat/lon
     static constexpr double kTleValueSpacingDegrees = (1.0 / 3600); ///< 1 Arc-Second spacing of elevation values
     static constexpr double kTileValueSpacingMeters = 30.0;

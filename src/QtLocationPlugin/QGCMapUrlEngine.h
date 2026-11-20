@@ -54,6 +54,8 @@ public:
     static QString providerTypeFromHash(int hash);
 
     static int hashFromProviderType(QStringView type);
+    /// Provider hash that GC versions before 5.2.0 used for every provider (no cache version). Used to find and migrate old cache rows.
+    static int legacyHashFromProviderType(QStringView type);
     static QString tileHashToType(QStringView tileHash);
     static QString getTileHash(QStringView type, int x, int y, int z);
 

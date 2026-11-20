@@ -238,6 +238,8 @@ private slots:
     void _flightModesChanged() { _buildActionList(_activeVehicle); }
 
 private:
+    friend class LicenseLinkGateTest;   // RotorLab: the joystick sends nothing while links are not allowed
+
     virtual bool _open() = 0;
     virtual void _close() = 0;
     virtual bool _update() = 0;

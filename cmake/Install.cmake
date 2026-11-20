@@ -50,6 +50,13 @@ qt_generate_deploy_qml_app_script(
 )
 install(SCRIPT ${deploy_script})
 
+# RotorLab: G72. Qt's Linux deployment has no plugin-type filter, so it copies the
+# QML debugger plugins (plugins/qmltooling). A release AppImage must not ship them
+# (same rule as Windows above); remove them before CreateAppImage.cmake packs the AppDir.
+if(LINUX AND NOT ANDROID AND NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+    install(CODE "file(REMOVE_RECURSE \"\${CMAKE_INSTALL_PREFIX}/plugins/qmltooling\")")
+endif()
+
 if(ANDROID)
     # get_target_property(QGC_ANDROID_DEPLOY_FILE ${CMAKE_PROJECT_NAME} QT_ANDROID_DEPLOYMENT_SETTINGS_FILE)
     # cmake_print_variables(QGC_ANDROID_DEPLOY_FILE)

@@ -119,7 +119,81 @@ void GeoFenceController::_managerVehicleChanged(Vehicle* managerVehicle)
     connect(_managerVehicle->parameterManager(), &ParameterManager::parametersReadyChanged, this, &GeoFenceController::_parametersReady);
     _parametersReady();
 
+    (void) connect(_managerVehicle, &Vehicle::firmwareTypeChanged, this, &GeoFenceController::breachReturnAltitudeUsageChanged);
+    (void) connect(_managerVehicle, &Vehicle::vehicleTypeChanged,  this, &GeoFenceController::breachReturnAltitudeUsageChanged);
+    emit breachReturnAltitudeUsageChanged();
+
     emit supportedChanged(supported());
+}
+
+// RotorLab GC 5.2.0 (G86). Checked against ArduPilot and PX4 source (master, 2026-11-16):
+//  - ArduPilot, all vehicles: GCS_MAVLink/MissionItemProtocol_Fence.cpp copies only x and y of a
+//    MAV_CMD_NAV_FENCE_RETURN_POINT, AC_Fence/AC_PolyFence_loader.cpp stores only latitude and
+//    longitude, and the point is read back with z = 0.
+//  - ArduCopter/fence.cpp and Rover/fence.cpp: a breach switches mode (RTL, Land, SmartRTL, Brake,
+//    Hold, Loiter); neither uses the return point.
+//  - ArduPlane/fence.cpp: a Guided fence action flies to the point at FENCE_RET_ALT above home
+//    (AC_Fence.cpp, a Plane-only parameter), else the middle of the fence altitudes or RTL altitude.
+//  - PX4 navigator/geofence.cpp skips NAV_CMD_FENCE_RETURN_POINT when it loads the fence.
+GeoFenceController::BreachReturnUse GeoFenceController::_breachReturnUse(void) const
+{
+    if (!_managerVehicle) {
+        return BreachReturnUse::HeightUsed;
+    }
+    if (_managerVehicle->apmFirmware()) {
+        if (_managerVehicle->fixedWing() || _managerVehicle->vtol()) {
+            return BreachReturnUse::ArduPlane;
+        }
+        if (_managerVehicle->multiRotor()) {
+            return BreachReturnUse::ArduCopter;
+        }
+        if (_managerVehicle->rover()) {
+            return BreachReturnUse::ArduRover;
+        }
+        return BreachReturnUse::ArduPilotOther;
+    }
+    if (_managerVehicle->px4Firmware()) {
+        return BreachReturnUse::PX4;
+    }
+    return BreachReturnUse::HeightUsed;
+}
+
+bool GeoFenceController::breachReturnAltitudeUsed(void) const
+{
+    return _breachReturnUse() == BreachReturnUse::HeightUsed;
+}
+
+QString GeoFenceController::breachReturnAltitudeLabel(void) const
+{
+    switch (_breachReturnUse()) {
+    case BreachReturnUse::ArduCopter:       return tr("Height not used by ArduPilot Copter");
+    case BreachReturnUse::ArduPlane:        return tr("Height not used by ArduPilot Plane");
+    case BreachReturnUse::ArduRover:        return tr("Height not used by ArduPilot Rover");
+    case BreachReturnUse::ArduPilotOther:   return tr("Height not used by ArduPilot");
+    case BreachReturnUse::PX4:              return tr("Height not used by PX4");
+    case BreachReturnUse::HeightUsed:       break;
+    }
+    return tr("Altitude");
+}
+
+QString GeoFenceController::breachReturnAltitudeNote(void) const
+{
+    const QString kept = tr("The height is kept in the plan file as read.");
+    switch (_breachReturnUse()) {
+    case BreachReturnUse::ArduCopter:
+        return tr("ArduPilot keeps only the position. ArduCopter does not fly to this point: its fence action (FENCE_ACTION) decides what it does.") + QStringLiteral(" ") + kept;
+    case BreachReturnUse::ArduPlane:
+        return tr("ArduPilot keeps only the position. With a Guided fence action, ArduPlane flies here at its fence return altitude (FENCE_RET_ALT) above home, not at this height.") + QStringLiteral(" ") + kept;
+    case BreachReturnUse::ArduRover:
+        return tr("ArduPilot keeps only the position. ArduPilot Rover does not drive to this point: its fence action (FENCE_ACTION) decides what it does.") + QStringLiteral(" ") + kept;
+    case BreachReturnUse::ArduPilotOther:
+        return tr("ArduPilot keeps only the position.") + QStringLiteral(" ") + kept;
+    case BreachReturnUse::PX4:
+        return tr("PX4 skips this point when it loads the fence: its geofence action (GF_ACTION) decides what it does. The point is kept in the plan file as read.");
+    case BreachReturnUse::HeightUsed:
+        break;
+    }
+    return QString();
 }
 
 bool GeoFenceController::load(const QJsonObject& json, QString& errorString)

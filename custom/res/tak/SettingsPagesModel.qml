@@ -9,7 +9,7 @@
 
 /****************************************************************************
  *
- * RotorLab GC custom settings page list. Modified by RotorLab Inc, 2026,
+ * RotorLab GC custom settings page list. Modified by RotorLab, Inc., 2026,
  * from src/UI/AppSettings/SettingsPagesModel.qml. Overrides the stock
  * SettingsPagesModel via the CustomOverrideInterceptor and adds the
  * TAK / ATAK page. All other entries mirror the stock model.
@@ -48,6 +48,15 @@ ListModel {
         url: "qrc:/qml/QGroundControl/AppSettings/VideoSettings.qml"
         iconUrl: "qrc:/InstrumentValueIcons/camera.svg"
         pageVisible: function() { return QGroundControl.settingsManager.videoSettings.visible }
+    }
+
+    ListElement {
+        // G95/G109: GC's own recording and Fleet live relay. Always listed; on a
+        // build without GC's own video receiver the page says why it is empty.
+        name: qsTr("Video recording and relay")
+        url: "qrc:/Custom/qml/QGroundControl/AppSettings/VideoSettingsPage.qml"
+        iconUrl: "qrc:/InstrumentValueIcons/camera.svg"
+        pageVisible: function() { return true }
     }
 
     ListElement {
@@ -90,22 +99,16 @@ ListModel {
     }
 
     ListElement {
-        name: qsTr("Fleet Connector")
-        url: "qrc:/Custom/qml/QGroundControl/AppSettings/FleetConnectorSettings.qml"
-        iconUrl: "qrc:/InstrumentValueIcons/cloud-upload.svg"
-        // Exactly one connector is active at a time. Hidden - not disabled -
-        // while the RotorLab Connector is on: a greyed-out row invites the
-        // customer to click it and ask why it does not work, and a row that is
-        // not there is not a question.
-        pageVisible: function() { return !RotorLabConnector.enabled }
-    }
-
-    ListElement {
         name: qsTr("RotorLab Connector")
         url: "qrc:/Custom/qml/QGroundControl/AppSettings/RotorLabConnectorSettings.qml"
         iconUrl: "qrc:/InstrumentValueIcons/cloud-upload.svg"
-        // The mirror of the row above: whichever connector is NOT this
+        // The mirror of the row below: whichever connector is NOT this
         // station's route is hidden, so there is only ever one place to look.
+        //
+        // This row comes BEFORE "Fleet Connector" (G59). Turning the
+        // RotorLab Connector on hides the Fleet Connector row; with that row
+        // below this one, this row and every row above it keep their place,
+        // so the row the operator just used does not jump under the pointer.
         //
         // The way in from the other side is the "File directly to RotorLab"
         // button on the Fleet Connector page - without it, an enrolled station
@@ -120,6 +123,17 @@ ListModel {
             return RotorLabConnector.enabled ||
                    !(FleetConnector.enrolled && !FleetConnector.suspended)
         }
+    }
+
+    ListElement {
+        name: qsTr("Fleet Connector")
+        url: "qrc:/Custom/qml/QGroundControl/AppSettings/FleetConnectorSettings.qml"
+        iconUrl: "qrc:/InstrumentValueIcons/cloud-upload.svg"
+        // Exactly one connector is active at a time. Hidden - not disabled -
+        // while the RotorLab Connector is on: a greyed-out row invites the
+        // customer to click it and ask why it does not work, and a row that is
+        // not there is not a question.
+        pageVisible: function() { return !RotorLabConnector.enabled }
     }
 
     ListElement {

@@ -39,6 +39,7 @@
 #include <QtCore/QTimer>
 #include <QtQmlIntegration/QtQmlIntegration>
 
+#include "Credential.h"
 #include "FlightWatcher.h"
 
 class RotorLabClient;
@@ -59,6 +60,7 @@ class RotorLabConnector : public QObject
     Q_PROPERTY(QString baseUrl         READ baseUrl         NOTIFY identityChanged)
     Q_PROPERTY(QString keyLabel        READ keyLabel        NOTIFY identityChanged)
     Q_PROPERTY(QString keyStoreName    READ keyStoreName    CONSTANT)
+    Q_PROPERTY(QString keyStorageText  READ keyStorageText  NOTIFY identityChanged)
     Q_PROPERTY(QString maskedKey       READ maskedKey       NOTIFY identityChanged)
 
     Q_PROPERTY(QString statusText      READ statusText      NOTIFY statusChanged)
@@ -186,6 +188,13 @@ public:
     QString keyLabel() const;
     QString keyStoreName() const;
     QString maskedKey() const;
+    /// Where the Device Key is kept, when that needs saying (G82): kept for
+    /// this session only, moved from the settings file, or removed from it.
+    /// Empty when the key is simply saved in the store.
+    QString keyStorageText() const;
+    /// The text keyStorageText() shows, from its inputs (for tests).
+    static QString keyStorageTextFor(Credential::FileCopy fileCopy, bool inOsStore, bool haveKey,
+                                     const QString &storeName);
 
     QString statusText() const { return _statusText; }
     bool serverNamesPilots() const;

@@ -160,7 +160,7 @@ void TerrainQueryCopernicus::_parseCoordinateData(const QJsonValue &coordinateJs
 
     QList<double> heights;
     for (const QJsonValue &dataValue: dataArray) {
-        (void) heights.append(dataValue.toDouble());
+        (void) heights.append(TerrainTileCopernicus::heightFromJson(dataValue));   // null is unknown (NaN), never 0 m
     }
 
     emit coordinateHeightsReceived(true, heights);
@@ -177,7 +177,7 @@ void TerrainQueryCopernicus::_parsePathData(const QJsonValue &pathJson)
 
     QList<double> heights;
     for (const QJsonValue &profileValue: profileArray) {
-        (void) heights.append(profileValue.toDouble());
+        (void) heights.append(TerrainTileCopernicus::heightFromJson(profileValue));   // null is unknown (NaN), never 0 m
     }
 
     emit pathHeightsReceived(true, latStep, lonStep, heights);
@@ -188,8 +188,8 @@ void TerrainQueryCopernicus::_parseCarpetData(const QJsonValue &carpetJson)
     const QJsonObject jsonObject = carpetJson.toArray()[0].toObject();
 
     const QJsonObject statsObject = jsonObject["stats"].toObject();
-    const double minHeight = statsObject["min"].toDouble();
-    const double maxHeight = statsObject["max"].toDouble();
+    const double minHeight = TerrainTileCopernicus::heightFromJson(statsObject["min"]);
+    const double maxHeight = TerrainTileCopernicus::heightFromJson(statsObject["max"]);
 
     QList<QList<double>> carpet;
     if (!_carpetStatsOnly) {
@@ -200,7 +200,7 @@ void TerrainQueryCopernicus::_parseCarpetData(const QJsonValue &carpetJson)
             (void) carpet.append(QList<double>());
 
             for (qsizetype j = 0; j < rowArray.count(); j++) {
-                const double height = rowArray[j].toDouble();
+                const double height = TerrainTileCopernicus::heightFromJson(rowArray[j]);
                 (void) carpet.last().append(height);
             }
         }

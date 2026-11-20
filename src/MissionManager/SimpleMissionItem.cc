@@ -284,6 +284,9 @@ bool SimpleMissionItem::load(QTextStream &loadStream)
         _updateOptionalSections();
         _rebuildFacts();
         setDirty(false);
+        // G76: kick off the terrain query, as the MissionItem constructor does (see load(QJsonObject)). This
+        // text format has no altitude mode 3, so nothing stored is cleared.
+        emit coordinateChanged(coordinate());
     }
 
     return success;
@@ -292,6 +295,14 @@ bool SimpleMissionItem::load(QTextStream &loadStream)
 bool SimpleMissionItem::load(const QJsonObject& json, int sequenceNumber, QString& errorString)
 {
     if (!_missionItem.load(json, sequenceNumber, errorString)) {
+        return false;
+    }
+
+    // RotorLab GC 5.3.0 (G96): a .plan stores NaN as null. A null only means something where the command
+    // says "unchanged" (nanUnchanged). Anywhere else GC needs a number; upstream loaded the null as NaN and
+    // wrote it back unchanged, so a hand-edited file could send NaN to the vehicle. Refuse the file at load
+    // with a message that names the item and the value.
+    if (!_checkNullNumbers(errorString)) {
         return false;
     }
 
@@ -308,7 +319,9 @@ bool SimpleMissionItem::load(const QJsonObject& json, int sequenceNumber, QStrin
 
             _altitudeMode = (QGroundControlQmlGlobal::AltMode)(int)json[_jsonAltitudeModeKey].toDouble();
             _altitudeFact.setRawValue(JsonHelper::possibleNaNJsonValue(json[_jsonAltitudeKey]));
-            _amslAltAboveTerrainFact.setRawValue(JsonHelper::possibleNaNJsonValue(json[_jsonAltitudeKey]));
+            // RotorLab GC 5.1.2 (G70): read AMSLAltAboveTerrain from its own key. Upstream read json[_jsonAltitudeKey]
+            // here, so load then save rewrote the saved value (null, or the terrain-based AMSL) with the altitude.
+            _amslAltAboveTerrainFact.setRawValue(JsonHelper::possibleNaNJsonValue(json[_jsonAMSLAltAboveTerrainKey]));
         } else {
             _altitudeMode = _missionItem.relativeAltitude() ? QGroundControlQmlGlobal::AltitudeModeRelative : QGroundControlQmlGlobal::AltitudeModeAbsolute;
             _altitudeFact.setRawValue(_missionItem._param7Fact.rawValue());
@@ -320,6 +333,59 @@ bool SimpleMissionItem::load(const QJsonObject& json, int sequenceNumber, QStrin
     _updateOptionalSections();
     _rebuildFacts();
     setDirty(false);
+
+    // G76: kick off the terrain query, as the MissionItem constructor does. The coordinate was set while the
+    // signals were not yet connected, so a loaded item never asked for the ground under it: a terrain frame
+    // item then had no AMSL height (param7 plus ground), and every 2D leg touching it stayed unknown.
+    // Not for "calculated above terrain" (mode 3): its AMSL is the stored param7, and the query first clears
+    // param7 while it waits (SimpleMissionItem::_terrainAltChanged), which would lose the stored value offline.
+    if (_altitudeMode != QGroundControlQmlGlobal::AltitudeModeCalcAboveTerrain) {
+        emit coordinateChanged(coordinate());
+    }
+
+    return true;
+}
+
+bool SimpleMissionItem::_checkNullNumbers(QString& errorString) const
+{
+    const MissionCommandUIInfo* uiInfo = MissionCommandTree::instance()->getUIInfo(_controllerVehicle, _previousVTOLMode, (MAV_CMD)command());
+    if (!uiInfo) {
+        // Unknown command: GC shows no fields for it and has no metadata to judge its values by.
+        return true;
+    }
+
+    const double params[7] = {
+        _missionItem.param1(), _missionItem.param2(), _missionItem.param3(), _missionItem.param4(),
+        _missionItem.param5(), _missionItem.param6(), _missionItem.param7(),
+    };
+
+    for (int index = 1; index <= 7; index++) {
+        if (!qIsNaN(params[index - 1])) {
+            continue;
+        }
+
+        QString valueName;
+        if (uiInfo->specifiesCoordinate() && (index == 5 || index == 6)) {
+            // The latitude and longitude of an item that has a position are always needed.
+            valueName = (index == 5) ? tr("latitude") : tr("longitude");
+        } else {
+            bool showUI = false;
+            const MissionCmdParamInfo* paramInfo = uiInfo->getParamInfo(index, showUI);
+            if (!paramInfo || !showUI || paramInfo->nanUnchanged()) {
+                // Not a value GC uses for this command, or one where null means "leave unchanged".
+                continue;
+            }
+            valueName = paramInfo->label().isEmpty() ? tr("param %1").arg(index) : paramInfo->label();
+        }
+
+        const QString commandLabel = uiInfo->friendlyName().isEmpty() ? uiInfo->rawName() : uiInfo->friendlyName();
+        errorString = tr("Item %1 (%2) has no value for %3 (param %4 is null). "
+                         "Enter a number for it in the plan file, then load the file again.")
+                          .arg(sequenceNumber())
+                          .arg(commandLabel, valueName)
+                          .arg(index);
+        return false;
+    }
 
     return true;
 }

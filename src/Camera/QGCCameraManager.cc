@@ -39,6 +39,15 @@ QGCCameraManager::CameraStruct::CameraStruct(QObject* parent, uint8_t compID_, V
     backoffTimer->setSingleShot(true);
 }
 
+QGCCameraManager::CameraStruct::~CameraStruct()
+{
+    // Camera info requests in flight hold a raw pointer to us as their handler data. Drop them so the
+    // vehicle can't call the result handlers (and _handleCameraInfoRetry) on a deleted CameraStruct.
+    if (vehicle) {
+        vehicle->cancelPendingHandlers(this);
+    }
+}
+
 //-----------------------------------------------------------------------------
 QGCCameraManager::QGCCameraManager(Vehicle *vehicle)
     : _vehicle                  (vehicle)

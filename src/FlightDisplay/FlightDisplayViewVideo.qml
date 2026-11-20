@@ -26,8 +26,11 @@ Item {
 
     property bool useSmallFont: true
 
-    property double _ar:                QGroundControl.videoManager.gstreamerEnabled
-                                            ? QGroundControl.videoManager.videoSize.width / QGroundControl.videoManager.videoSize.height
+    // G88: the size of the decoded picture whenever a receiver reports one (GStreamer or GC's
+    // FFmpeg receiver), else the aspect ratio from the settings or the camera
+    property size   _videoSize:         QGroundControl.videoManager.videoSize
+    property double _ar:                (_videoSize.width > 0 && _videoSize.height > 0)
+                                            ? _videoSize.width / _videoSize.height
                                             : QGroundControl.videoManager.aspectRatio
     property bool   _showGrid:          QGroundControl.settingsManager.videoSettings.gridLines.rawValue
     property var    _dynamicCameras:    globals.activeVehicle ? globals.activeVehicle.cameraManager : null
@@ -42,6 +45,8 @@ Item {
     property bool   _isMode_FIT_HEIGHT: _fitMode === 1
     property bool   _isMode_FILL:       _fitMode === 2
     property bool   _isMode_NO_CROP:    _fitMode === 3
+    // G109, G88 M4: forward-only relay mode does not show the video here; the message says why
+    property bool   _relayHidesVideo:   typeof VideoRelay !== "undefined" && VideoRelay.hideFlyViewVideo
 
     function getWidth() {
         return videoBackground.getWidth()
@@ -57,7 +62,7 @@ Item {
             anchors.fill:   parent
             source:         "/res/NoVideoBackground.jpg"
             fillMode:       Image.PreserveAspectCrop
-            visible:        !(QGroundControl.videoManager.decoding)
+            visible:        !(QGroundControl.videoManager.decoding) || _relayHidesVideo
 
             Rectangle {
                 anchors.centerIn:   parent
@@ -70,7 +75,14 @@ Item {
 
             QGCLabel {
                 id:                 noVideoLabel
-                text:               QGroundControl.settingsManager.videoSettings.streamEnabled.rawValue ? qsTr("WAITING FOR VIDEO") : qsTr("VIDEO DISABLED")
+                // G88 (m4080): a receiver that gets no video says why (for example its UDP port is in use)
+                property string _receiveStatus: QGroundControl.videoManager.receiveStatusText
+                text:               _relayHidesVideo ? qsTr("Video is sent to the Fleet Server and not shown here. Change this in Video recording and relay settings.")
+                                        : !QGroundControl.settingsManager.videoSettings.streamEnabled.rawValue ? qsTr("VIDEO DISABLED")
+                                        : (_receiveStatus !== "" ? _receiveStatus : qsTr("WAITING FOR VIDEO"))
+                width:              Math.min(implicitWidth, parent.width * 0.8)
+                wrapMode:           Text.WordWrap
+                horizontalAlignment: Text.AlignHCenter
                 font.bold:          true
                 color:              "white"
                 font.pointSize:     useSmallFont ? ScreenTools.smallFontPointSize : ScreenTools.largeFontPointSize
@@ -82,7 +94,8 @@ Item {
         id:             videoBackground
         anchors.fill:   parent
         color:          "black"
-        visible:        QGroundControl.videoManager.decoding
+        // G109: in forward-only relay mode the video is not shown here; the receiver keeps decoding
+        visible:        QGroundControl.videoManager.decoding && !_relayHidesVideo
         function getWidth() {
             if(_ar != 0.0){
                 if(_isMode_FIT_HEIGHT 
@@ -231,6 +244,35 @@ Item {
                 }
             }
             property int zoom: 0
+        }
+    }
+
+    // G95, G109 (G88 M1, M2): the record and relay chips. Top left, past the Fly view tool strip
+    // in full view; inside the picture in the PiP. They wrap to a second row before they can
+    // overlap. Each Loader stays inactive when its module is not in this build; the record chip
+    // hides itself when recording is off.
+    Flow {
+        id:                 statusChips
+        anchors.top:        parent.top
+        anchors.left:       parent.left
+        anchors.topMargin:  ScreenTools.defaultFontPixelWidth
+        anchors.leftMargin: useSmallFont ? ScreenTools.defaultFontPixelWidth
+                                         : ScreenTools.defaultFontPixelWidth * 10   // clear of FlyViewToolStrip
+        width:              useSmallFont ? parent.width - ScreenTools.defaultFontPixelWidth * 2
+                                         : Math.min(parent.width * 0.35, ScreenTools.defaultFontPixelWidth * 48)
+        spacing:            ScreenTools.defaultFontPixelWidth / 2
+
+        Loader {
+            active:         source !== ""
+            source:         QGroundControl.videoManager.recordStatusChipSource
+            visible:        status === Loader.Ready && item.shown   // a hidden chip takes no place in the row
+            onLoaded:       item.maxWidth = Qt.binding(function() { return statusChips.width })
+        }
+        Loader {
+            active:         typeof VideoRelay !== "undefined"
+            source:         active ? "qrc:/custom/video/VideoRelayStatus.qml" : ""
+            visible:        status === Loader.Ready && item.shown   // a hidden chip takes no place in the row
+            onLoaded:       item.maxWidth = Qt.binding(function() { return statusChips.width })
         }
     }
 }

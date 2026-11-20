@@ -32,4 +32,10 @@ private slots:
     void _wrongPinRefusesBeforeSending();
     void _pinOverPlainHttpRefused();
     void _liveEnroll();
+
+    /// G40: joining a Fleet Server closes a live TAK link and turns
+    /// "Commands to aircraft on" off; the RotorLab Connector taking over
+    /// does not.
+    void _takRouteEdge();
+    void _joinClosesTakLink();
 };

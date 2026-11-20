@@ -1,0 +1,229 @@
+{
+    "fileType": "Plan",
+    "geoFence": {
+        "breachReturn": [
+            37.7679,
+            -122.4927174,
+            35
+        ],
+        "circles": [
+            {
+                "circle": {
+                    "center": [
+                        37.76789965,
+                        -122.48884985002886
+                    ],
+                    "radius": 375.0289428582434
+                },
+                "inclusion": true,
+                "version": 1
+            },
+            {
+                "circle": {
+                    "center": [
+                        37.7692487,
+                        -122.48532245000001
+                    ],
+                    "radius": 22.496285002375842
+                },
+                "inclusion": false,
+                "version": 1
+            }
+        ],
+        "polygons": [
+            {
+                "inclusion": true,
+                "polygon": [
+                    [
+                        37.769586098109116,
+                        -122.49311552028782
+                    ],
+                    [
+                        37.769586098109116,
+                        -122.4845834797332
+                    ],
+                    [
+                        37.76621334810912,
+                        -122.4845834797332
+                    ],
+                    [
+                        37.76621334810912,
+                        -122.49311552028782
+                    ]
+                ],
+                "version": 1
+            },
+            {
+                "inclusion": false,
+                "polygon": [
+                    [
+                        37.76816976099286,
+                        -122.48944660959447
+                    ],
+                    [
+                        37.76816976099286,
+                        -122.48825209040557
+                    ],
+                    [
+                        37.76763013599285,
+                        -122.48825209040557
+                    ],
+                    [
+                        37.76763013599285,
+                        -122.48944660959447
+                    ]
+                ],
+                "version": 1
+            }
+        ],
+        "version": 2
+    },
+    "groundStation": "RotorLab",
+    "mission": {
+        "cruiseSpeed": 15,
+        "firmwareType": 3,
+        "globalPlanAltitudeMode": 1,
+        "hoverSpeed": 5,
+        "items": [
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 30,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 22,
+                "doJumpId": 1,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    0,
+                    0,
+                    30
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 40,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 16,
+                "doJumpId": 2,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    37.7687993,
+                    -122.4911246,
+                    40
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 40,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 16,
+                "doJumpId": 3,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    37.7687991,
+                    -122.4865739,
+                    40
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 40,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 16,
+                "doJumpId": 4,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    37.7670005,
+                    -122.4865741,
+                    40
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "AMSLAltAboveTerrain": null,
+                "Altitude": 40,
+                "AltitudeMode": 1,
+                "autoContinue": true,
+                "command": 16,
+                "doJumpId": 5,
+                "frame": 3,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    null,
+                    37.7670007,
+                    -122.4911247,
+                    40
+                ],
+                "type": "SimpleItem"
+            },
+            {
+                "autoContinue": true,
+                "command": 20,
+                "doJumpId": 6,
+                "frame": 2,
+                "params": [
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0,
+                    0
+                ],
+                "type": "SimpleItem"
+            }
+        ],
+        "plannedHomePosition": [
+            37.7679,
+            -122.4934,
+            20
+        ],
+        "vehicleType": 2,
+        "version": 2
+    },
+    "rallyPoints": {
+        "points": [
+            [
+                37.769249,
+                -122.4922623,
+                0
+            ],
+            [
+                37.7665509,
+                -122.4888494,
+                0
+            ],
+            [
+                37.7692487,
+                -122.4848674,
+                0
+            ]
+        ],
+        "version": 2
+    },
+    "version": 1
+}

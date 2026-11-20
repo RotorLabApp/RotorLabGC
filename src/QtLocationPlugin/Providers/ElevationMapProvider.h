@@ -53,6 +53,9 @@ public:
     static constexpr const char *kProviderNotice = "© Airbus Defence and Space GmbH";
     static constexpr const char *kProviderURL = "https://terrain-ce.suite.auterion.com";
     static constexpr quint32 kAvgElevSize = 2786;
+    /// Part of the tile cache key. GC 5.2.0 (G79): tiles cached by older versions can hold 0 m for a null height,
+    /// so the key changed and those entries are never found again. Change it whenever the tile format or meaning changes.
+    static constexpr const char *kTileCacheVersion = "-v2";
 
 private:
     QString _getURL(int x, int y, int zoom) const final;

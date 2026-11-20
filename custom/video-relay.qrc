@@ -1,0 +1,8 @@
+<RCC>
+    <!-- G109 live relay QML. Added by custom/CMakeLists.txt only where
+         src/video/relay exists, so a tree without it still builds. -->
+    <qresource prefix="/custom/video">
+        <file alias="VideoRelaySettings.qml">src/video/relay/qml/VideoRelaySettings.qml</file>
+        <file alias="VideoRelayStatus.qml">src/video/relay/qml/VideoRelayStatus.qml</file>
+    </qresource>
+</RCC>

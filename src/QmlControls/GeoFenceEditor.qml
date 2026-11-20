@@ -338,12 +338,25 @@ QGCFlickable {
                         spacing:            _margin
                         visible:            breachReturnSection.visible && myGeoFenceController.breachReturnPoint.isValid
 
+                        // RotorLab GC 5.2.0 (G86): ArduPilot keeps only the point's position and PX4
+                        // skips the point, so the height is shown read only and kept as read.
                         QGCLabel {
-                            text: qsTr("Altitude")
+                            Layout.preferredWidth:  parent.width
+                            wrapMode:               Text.WordWrap
+                            text:                   myGeoFenceController.breachReturnAltitudeLabel
                         }
 
                         FactTextField {
-                            fact: myGeoFenceController.breachReturnAltitude
+                            fact:       myGeoFenceController.breachReturnAltitude
+                            enabled:    myGeoFenceController.breachReturnAltitudeUsed
+                        }
+
+                        QGCLabel {
+                            Layout.preferredWidth:  parent.width
+                            wrapMode:           Text.WordWrap
+                            font.pointSize:     ScreenTools.smallFontPointSize
+                            text:               myGeoFenceController.breachReturnAltitudeNote
+                            visible:            !myGeoFenceController.breachReturnAltitudeUsed
                         }
                     }
 

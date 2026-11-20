@@ -14,6 +14,8 @@
 #include <QtCore/QMutex>
 #include <QtCore/QSet>
 
+#include <functional>
+
 #ifndef CREDENTIAL_NO_VEHICLES
 #include "MultiVehicleManager.h"
 #include "QmlObjectListModel.h"
@@ -24,9 +26,9 @@
 // wincred.h does not include what it needs; windows.h has to come first.
 #include <windows.h>
 #include <wincred.h>
-#else
-#include <QtCore/QSettings>
 #endif
+
+#include <QtCore/QSettings>
 
 #if defined(Q_OS_ANDROID)
 #include <QtCore/QJniEnvironment>
@@ -43,18 +45,102 @@ QString tr(const char *text)
     return QCoreApplication::translate("Credential", text);
 }
 
+/// What the stored secret is, in messages: the TAK password account (and
+/// its unit-test variant) is "TAK password"; every other account is the
+/// RotorLab Device Key.
+QString entryName(const QString &account)
+{
+    return account.contains(QLatin1String("TAK password")) ? QStringLiteral("TAK password")
+                                                           : QStringLiteral("Device Key");
+}
+
 #ifdef Q_OS_WIN
 
 /// The name the secret is filed under in the Windows Credential Manager. An
-/// operator who goes looking for it should be able to recognise it.
-/// Deliberate exception to the no-em-dash rule: this exact string is the key
-/// already saved on every Windows install, and renaming it would orphan them.
+/// operator who goes looking for it should be able to recognize it.
 QString targetName(const QString &account)
 {
-    return QStringLiteral("RotorLab GC — %1").arg(account);
+    return QStringLiteral("RotorLab GC - %1").arg(account);
 }
 
-#else
+/// The name GC 5.1.x and earlier used (with an em dash, U+2014). Read once to
+/// move an entry to targetName(), then deleted. Never written.
+QString oldTargetName(const QString &account)
+{
+    return QStringLiteral("RotorLab GC ") + QChar(0x2014) + QStringLiteral(" ") + account;
+}
+
+/// True when an entry exists under `target`; its secret goes to `out`.
+bool winRead(const QString &target, QString *out)
+{
+    PCREDENTIALW cred = nullptr;
+    if (!::CredReadW(reinterpret_cast<LPCWSTR>(target.utf16()), CRED_TYPE_GENERIC, 0, &cred)) {
+        return false;
+    }
+    out->clear();
+    if (cred->CredentialBlob && cred->CredentialBlobSize > 0) {
+        *out = QString::fromUtf8(reinterpret_cast<const char *>(cred->CredentialBlob),
+                                 static_cast<int>(cred->CredentialBlobSize));
+        ::SecureZeroMemory(cred->CredentialBlob, cred->CredentialBlobSize);
+    }
+    ::CredFree(cred);
+    return true;
+}
+
+bool winWrite(const QString &target, const QString &secret)
+{
+    QByteArray blob = secret.toUtf8();
+    CREDENTIALW cred{};
+    cred.Type               = CRED_TYPE_GENERIC;
+    cred.TargetName         = const_cast<LPWSTR>(reinterpret_cast<LPCWSTR>(target.utf16()));
+    cred.CredentialBlobSize = static_cast<DWORD>(blob.size());
+    cred.CredentialBlob     = reinterpret_cast<LPBYTE>(blob.data());
+    // Bound to this machine and this Windows account. Deliberately not
+    // CRED_PERSIST_ENTERPRISE: a ground station's key should not roam to every
+    // machine the operator signs in to.
+    cred.Persist            = CRED_PERSIST_LOCAL_MACHINE;
+    const bool ok = ::CredWriteW(&cred, 0);
+    // The key existed in this process's memory; do not leave a copy behind.
+    ::SecureZeroMemory(blob.data(), static_cast<size_t>(blob.size()));
+    return ok;
+}
+
+void winDelete(const QString &target)
+{
+    // Nothing to delete is not an error worth reporting.
+    (void)::CredDeleteW(reinterpret_cast<LPCWSTR>(target.utf16()), CRED_TYPE_GENERIC, 0);
+}
+
+/// Read `account`, moving an entry saved under the old name to the new one.
+/// The old entry is deleted only after the new one is written and reads back
+/// the same; otherwise it stays and the move is tried again at the next start.
+QString winLoad(const QString &account)
+{
+    QString key;
+    if (winRead(targetName(account), &key)) {
+        // A run stopped between the write and the delete leaves both. The new
+        // entry was written, so the old one can go.
+        winDelete(oldTargetName(account));
+        return key;
+    }
+    QString old;
+    if (!winRead(oldTargetName(account), &old) || old.isEmpty()) {
+        return {};
+    }
+    QString check;
+    if (winWrite(targetName(account), old) && winRead(targetName(account), &check) && check == old) {
+        winDelete(oldTargetName(account));
+        qInfo().noquote() << "Credential: the" << entryName(account)
+                          << "entry in Windows Credential Manager was renamed to" << targetName(account);
+    } else {
+        qWarning().noquote() << "Credential: the" << entryName(account)
+                             << "entry in Windows Credential Manager could not be renamed;"
+                             << "GC keeps using the old entry and tries again at the next start";
+    }
+    return old;
+}
+
+#endif // Q_OS_WIN
 
 void wipe(QByteArray &bytes)
 {
@@ -65,9 +151,11 @@ void wipe(QByteArray &bytes)
 }
 
 // ------------------------------------------------------------ settings file
-// The key base64-encoded in the application's settings file. This is the
-// store on platforms without one, and where older builds kept the key on
-// every platform except Windows. Base64 is an encoding, not encryption.
+// Older builds kept the key base64-encoded in the application's settings
+// file on every platform except Windows, and on Linux with no Secret Service
+// until GC 5.2.0. Base64 is an encoding, not encryption. GC no longer writes
+// a key there on any platform (G82); it only reads an old copy, to move it
+// into a store or remove it, and clears it.
 
 constexpr auto kFileGroup = "RotorLabCredential";
 
@@ -84,17 +172,6 @@ QString fileLoad(const QString &account)
     wipe(plain);
     wipe(raw);
     return out;
-}
-
-[[maybe_unused]] void fileStore(const QString &account, const QString &secret)
-{
-    QByteArray plain = secret.toUtf8();
-    QSettings s;
-    s.beginGroup(QLatin1String(kFileGroup));
-    s.setValue(account, plain.toBase64());
-    s.endGroup();
-    s.sync();
-    wipe(plain);
 }
 
 /// False when a value was there and the settings file could not be written
@@ -117,12 +194,79 @@ bool fileErase(const QString &account)
 [[maybe_unused]] void dropFileCopyAfterStore(const QString &account)
 {
     if (!fileErase(account)) {
-        qWarning() << "Credential: the old settings-file copy of the Device Key could not be removed;"
+        qWarning().noquote() << "Credential: the old settings-file copy of the" << entryName(account) << "could not be removed;"
                    << "it may replace the newly stored key at the next start";
     }
 }
 
-#endif // !Q_OS_WIN
+// What the last read did with an old settings-file copy, per account. Read
+// and written only with the key cache mutex held (platformLoad runs under it).
+QHash<QString, Credential::FileCopy> &fileCopies()
+{
+    static QHash<QString, Credential::FileCopy> h;
+    return h;
+}
+
+/// The old settings-file copy is not used: it is removed from the file and the
+/// user is asked to enter the key again. Returns the empty key.
+QString dropFileCopyUnused(const QString &account, const char *why)
+{
+    if (!fileErase(account)) {
+        qWarning().noquote() << "Credential: the old settings-file copy of the" << entryName(account)
+                             << "could not be removed from the settings file";
+    }
+    qWarning().noquote() << "Credential: removed the" << entryName(account)
+                         << "from the settings file, where an earlier version saved it, and did not use it:" << why;
+    fileCopies().insert(account, Credential::FileCopy::Removed);
+    return {};
+}
+
+/// G82, one rule for every platform with a store (Linux Secret Service,
+/// Android Keystore): a key an older build left in the settings file is
+/// moved into the store when the store takes it and reads it back, and is
+/// then removed from the file. Otherwise it is removed from the file and NOT
+/// used: dropStoreCopy() clears any older store copy it replaced, and the
+/// user is asked to enter the key again. Returns false when there is no file
+/// copy (and leaves *key alone). Platform-free, so tests drive it with fakes.
+/// Caller holds the key cache mutex.
+bool resolveFileCopyLocked(const QString &account, const std::function<bool(const QString &)> &moveToStore,
+                           const std::function<void()> &dropStoreCopy, QString *key)
+{
+    const QString plain = fileLoad(account);
+    if (plain.isEmpty()) {
+        return false;
+    }
+    if (moveToStore(plain)) {
+        if (fileErase(account)) {
+            fileCopies().insert(account, Credential::FileCopy::Moved);
+            qInfo().noquote() << "Credential: moved the" << entryName(account)
+                              << "from the settings file to" << Credential::storeName();
+        } else {
+            dropFileCopyAfterStore(account);   // warns
+        }
+        *key = plain;
+        return true;
+    }
+    dropStoreCopy();
+    *key = dropFileCopyUnused(account, "the system key store did not accept it");
+    return true;
+}
+
+bool g_noOsStoreForTests = false;
+
+/// G105: a Daily build started with RL_TEST_NO_CREDENTIAL_STORE=1 never
+/// reads, writes or erases the OS credential store. A test GUI on a developer
+/// machine keeps every key for the session only, so a test value never lands
+/// in the OS store under the same name as a real entry. Compiled out of stable
+/// builds.
+bool testStoreBlocked()
+{
+#ifdef QGC_DAILY_BUILD
+    return qEnvironmentVariableIntValue("RL_TEST_NO_CREDENTIAL_STORE") == 1;
+#else
+    return false;
+#endif
+}
 
 #if defined(Q_OS_ANDROID)
 
@@ -349,7 +493,7 @@ bool sealedStore(const QString &account, const QString &secret)
     const bool ok = keystoreEncrypt(plain, &iv, &sealed);
     wipe(plain);
     if (!ok) {
-        qWarning() << "Credential: the Android Keystore refused to encrypt the Device Key";
+        qWarning().noquote() << "Credential: the Android Keystore refused to encrypt the" << entryName(account);
         return false;
     }
     QSettings s;
@@ -376,7 +520,7 @@ QString sealedLoad(const QString &account, bool *found)
     QByteArray plain;
     if (!keystoreDecrypt(QByteArray::fromBase64(parts.at(1).toLatin1()),
                          QByteArray::fromBase64(parts.at(2).toLatin1()), &plain)) {
-        qWarning() << "Credential: the Android Keystore could not open the stored Device Key";
+        qWarning().noquote() << "Credential: the Android Keystore could not open the stored" << entryName(account);
         return {};
     }
     const QString out = QString::fromUtf8(plain);
@@ -491,7 +635,8 @@ bool secretStore(const QString &account, const QString &secret)
 {
     const SecretApi &api = secretApi();
     const QByteArray acc = account.toUtf8();
-    const QByteArray label = QStringLiteral("RotorLab GC Device Key (%1)").arg(account).toUtf8();
+    // Display only: lookups match the schema and the "account" attribute.
+    const QByteArray label = Credential::entryLabel(account).toUtf8();
     QByteArray pw = secret.toUtf8();
     GError *err = nullptr;
     const gboolean ok = api.store(&deviceKeySchema(), "default", label.constData(), pw.constData(),
@@ -539,26 +684,38 @@ void secretErase(const QString &account)
 
 namespace {
 
+/// A store GC may save a key in: Credential Manager, the Android Keystore, or
+/// a Secret Service that answered. Never the settings file.
+bool osStoreUsable()
+{
+    if (g_noOsStoreForTests || testStoreBlocked()) {
+        return false;
+    }
+#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
+    return true;
+#elif defined(Q_OS_LINUX)
+    return secretApi().usable;
+#else
+    return false;
+#endif
+}
+
 bool platformStore(const QString &account, const QString &secret)
 {
+    if (!osStoreUsable()) {
+        // G82: never the settings file. The caller keeps it for this session
+        // only (keepForSession) and says so.
+        qWarning().noquote() << "Credential: the" << entryName(account)
+                             << "is not saved: there is no system key store, and GC does not write it to the settings file";
+        return false;
+    }
 #if defined(Q_OS_WIN)
-    const QString target = targetName(account);
-    QByteArray blob = secret.toUtf8();
-
-    CREDENTIALW cred{};
-    cred.Type            = CRED_TYPE_GENERIC;
-    cred.TargetName      = const_cast<LPWSTR>(reinterpret_cast<LPCWSTR>(target.utf16()));
-    cred.CredentialBlobSize = static_cast<DWORD>(blob.size());
-    cred.CredentialBlob  = reinterpret_cast<LPBYTE>(blob.data());
-    // Bound to this machine and this Windows account. Deliberately not
-    // CRED_PERSIST_ENTERPRISE: a ground station's key should not roam to every
-    // machine the operator signs in to.
-    cred.Persist         = CRED_PERSIST_LOCAL_MACHINE;
-
-    const bool ok = ::CredWriteW(&cred, 0);
-    // The key existed in this process's memory; do not leave a copy behind.
-    ::SecureZeroMemory(blob.data(), static_cast<size_t>(blob.size()));
-    return ok;
+    if (!winWrite(targetName(account), secret)) {
+        return false;
+    }
+    // The new entry replaces anything under the old name.
+    winDelete(oldTargetName(account));
+    return true;
 #elif defined(Q_OS_ANDROID)
     if (!sealedStore(account, secret)) {
         return false;   // fail closed: no plain copy instead
@@ -566,91 +723,99 @@ bool platformStore(const QString &account, const QString &secret)
     dropFileCopyAfterStore(account);
     return true;
 #elif defined(Q_OS_LINUX)
-    if (secretApi().usable) {
-        if (!secretStore(account, secret)) {
-            return false;   // fail closed: no plain copy instead
-        }
-        dropFileCopyAfterStore(account);
-        return true;
+    if (!secretStore(account, secret)) {
+        return false;   // fail closed: no plain copy instead
     }
-    fileStore(account, secret);
+    dropFileCopyAfterStore(account);
     return true;
 #else
-    fileStore(account, secret);
-    return true;
+    Q_UNUSED(secret);
+    return false;   // osStoreUsable() is false here
 #endif
 }
 
 QString platformLoad(const QString &account)
 {
-#if defined(Q_OS_WIN)
-    const QString target = targetName(account);
-    PCREDENTIALW cred = nullptr;
-    if (!::CredReadW(reinterpret_cast<LPCWSTR>(target.utf16()), CRED_TYPE_GENERIC, 0, &cred)) {
+    // Test runs only (G64, rule 14; G105): a Daily build started with
+    // RL_TEST_NO_CREDENTIAL_STORE=1 never reads the OS credential store, so a
+    // test GUI on a developer machine cannot pick up the installed GC's real
+    // Device Key. It does not touch the settings file either. Compiled out of
+    // stable builds (testStoreBlocked() is false there).
+    if (testStoreBlocked()) {
+        Q_UNUSED(account);
         return {};
     }
-    QString out;
-    if (cred->CredentialBlob && cred->CredentialBlobSize > 0) {
-        out = QString::fromUtf8(reinterpret_cast<const char *>(cred->CredentialBlob),
-                                static_cast<int>(cred->CredentialBlobSize));
-        ::SecureZeroMemory(cred->CredentialBlob, cred->CredentialBlobSize);
+    if (!osStoreUsable()) {
+        // G82: an old settings-file copy is not used silently. With no store
+        // to move it to, it is removed and the user enters the key again.
+        if (!fileLoad(account).isEmpty()) {
+            return dropFileCopyUnused(account, "there is no system key store to move it to");
+        }
+        return {};
     }
-    ::CredFree(cred);
-    return out;
+#if defined(Q_OS_WIN)
+    return winLoad(account);
 #elif defined(Q_OS_ANDROID)
     // A plain base64 value is never older than the sealed one: every store
     // erases it. So it wins, and is moved: sealed, read back, then erased.
-    // If anything fails the plain value stays and the move is tried again at
-    // the next start.
-    const QString plain = fileLoad(account);
-    if (!plain.isEmpty()) {
-        if (sealedStore(account, plain)) {
-            bool found = false;
-            if (sealedLoad(account, &found) == plain) {
-                fileErase(account);
-            }
-        }
-        return plain;
+    // G82: if the Keystore does not take it (encryption fails, or it does not
+    // read back), it is removed from the file and not used; the user enters
+    // the key again.
+    QString key;
+    if (resolveFileCopyLocked(account,
+                              [&account](const QString &plain) {
+                                  bool found = false;
+                                  return sealedStore(account, plain) && sealedLoad(account, &found) == plain;
+                              },
+                              [&account] { sealedErase(account); }, &key)) {
+        return key;
     }
     bool found = false;
     return sealedLoad(account, &found);
 #elif defined(Q_OS_LINUX)
-    if (!secretApi().usable) {
-        return fileLoad(account);
-    }
     // A file value is never older than the keyring copy (every keyring store
     // erases it), and it may have been saved while no Secret Service ran. So
     // it wins, and is moved: stored, read back, then erased from the file.
-    const QString plain = fileLoad(account);
-    if (!plain.isEmpty()) {
-        if (secretStore(account, plain) && secretLoad(account) == plain) {
-            fileErase(account);
-        }
-        return plain;
+    // G82: if the keyring does not take it, it is not used and not left in
+    // the file either; the user enters the key again. The older keyring
+    // copy it replaced is cleared too, so it does not come back later.
+    QString key;
+    if (resolveFileCopyLocked(account,
+                              [&account](const QString &plain) {
+                                  return secretStore(account, plain) && secretLoad(account) == plain;
+                              },
+                              [&account] { secretErase(account); }, &key)) {
+        return key;
     }
     return secretLoad(account);
 #else
-    return fileLoad(account);
+    return {};   // osStoreUsable() is false here
 #endif
 }
 
 void platformErase(const QString &account)
 {
+    if (testStoreBlocked()) {
+        // G105: a test run never deletes an OS store entry: under the fixed
+        // names it could be the installed GC's real Device Key or TAK
+        // password. Only a plain value in this run's own settings file goes.
+        fileErase(account);
+        return;
+    }
 #if defined(Q_OS_WIN)
-    const QString target = targetName(account);
-    // Nothing to delete is not an error worth reporting.
-    (void)::CredDeleteW(reinterpret_cast<LPCWSTR>(target.utf16()), CRED_TYPE_GENERIC, 0);
+    winDelete(targetName(account));
+    winDelete(oldTargetName(account));
 #else
 #if defined(Q_OS_ANDROID)
     sealedErase(account);
 #elif defined(Q_OS_LINUX)
-    if (secretApi().usable) {
+    if (osStoreUsable()) {
         secretErase(account);
     }
 #endif
+#endif
     // Also any plain value an older build left behind.
     fileErase(account);
-#endif
 }
 
 // ------------------------------------------- in-memory copy, armed rule
@@ -664,6 +829,7 @@ struct KeyCache {
     QHash<QString, QString> keys;           ///< account -> key ("" = none)
     QSet<QString>           pendingErase;   ///< erased while armed, store not yet
     bool                    quitHooked = false;
+    QSet<QString>           unitTestAccounts;   ///< G105: erased when the unit test run ends
 };
 
 KeyCache &keyCache()
@@ -714,33 +880,54 @@ void flushAtQuit()
         flushPendingErases(c);
     }
 }
+
+/// G105: the unit test accounts ("Unit test Device Key <pid>", "Unit test TAK
+/// password <pid>", CredentialTest's "unittest-<uuid>") get a new name every
+/// run, so an entry a test left behind would stay in the OS store for good.
+/// Every one a unit test run saves is remembered here and erased by
+/// Credential::eraseUnitTestAccounts() when the run ends. Caller holds the
+/// mutex.
+void trackUnitTestAccount(KeyCache &c, const QString &account)
+{
+#ifdef QGC_UNITTEST_BUILD
+    if (account.startsWith(QLatin1String("Unit test ")) || account.startsWith(QLatin1String("unittest-"))) {
+        c.unitTestAccounts.insert(account);
+    }
+#else
+    Q_UNUSED(c);
+    Q_UNUSED(account);
+#endif
+}
 } // namespace
 
 namespace Credential {
 
 bool inOsStore()
 {
-#if defined(Q_OS_WIN) || defined(Q_OS_ANDROID)
-    return true;
-#elif defined(Q_OS_LINUX)
-    return secretApi().usable;
-#else
-    return false;
-#endif
+    return osStoreUsable();
 }
 
 QString storeName()
 {
+    if (!osStoreUsable()) {
+        // G82: nothing is saved anywhere when there is no store.
+        if (testStoreBlocked()) {
+            return tr("this session only (test run: the system key store is not used)");
+        }
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+        return tr("this session only (no Secret Service found)");
+#else
+        return tr("this session only (no system key store found)");
+#endif
+    }
 #if defined(Q_OS_WIN)
     return tr("Windows Credential Manager");
 #elif defined(Q_OS_ANDROID)
-    return tr("app-private settings, encrypted with an Android Keystore key");
+    return tr("encrypted app storage (Android Keystore)");
 #elif defined(Q_OS_LINUX)
-    return secretApi().usable
-        ? tr("Secret Service (desktop keyring)")
-        : tr("settings file, base64-encoded, not encrypted (no Secret Service found)");
+    return tr("Secret Service (desktop keyring)");
 #else
-    return tr("settings file, base64-encoded, not encrypted");
+    return {};   // osStoreUsable() is false here
 #endif
 }
 
@@ -757,15 +944,60 @@ bool store(const QString &account, const QString &secret)
     KeyCache &c = keyCache();
     QMutexLocker lock(&c.mutex);
     if (anyVehicleArmed()) {
-        qWarning() << "Credential: the Device Key is not saved while a vehicle is armed; save it again after landing";
+        qWarning().noquote() << "Credential: the" << entryName(account)
+                             << "is not saved while a vehicle is armed; save it again after landing";
         return false;
     }
     flushPendingErases(c);
     if (!platformStore(account, secret)) {
         return false;
     }
+    trackUnitTestAccount(c, account);
     c.keys.insert(account, secret);
+    fileCopies().remove(account);
     return true;
+}
+
+bool keepForSession(const QString &account, const QString &secret)
+{
+    if (account.isEmpty() || secret.isEmpty()) {
+        return false;
+    }
+    KeyCache &c = keyCache();
+    QMutexLocker lock(&c.mutex);
+    c.keys.insert(account, secret);   // memory only: no store, no file
+    fileCopies().remove(account);
+    return true;
+}
+
+FileCopy fileCopy(const QString &account)
+{
+    KeyCache &c = keyCache();
+    QMutexLocker lock(&c.mutex);
+    return fileCopies().value(account, FileCopy::None);
+}
+
+void setNoOsStoreForTests(bool on)
+{
+    g_noOsStoreForTests = on;
+}
+
+QString resolveFileCopyForTests(const QString &account, bool storeAccepts, bool *storeCopyDropped,
+                                QString *storedCopy)
+{
+    KeyCache &c = keyCache();
+    QMutexLocker lock(&c.mutex);
+    *storeCopyDropped = false;
+    QString key;
+    resolveFileCopyLocked(account,
+                          [&](const QString &plain) {
+                              if (storeAccepts) {
+                                  *storedCopy = plain;
+                              }
+                              return storeAccepts;
+                          },
+                          [&] { *storeCopyDropped = true; }, &key);
+    return key;
 }
 
 QString load(const QString &account)
@@ -805,6 +1037,7 @@ void erase(const QString &account)
     KeyCache &c = keyCache();
     QMutexLocker lock(&c.mutex);
     c.keys.insert(account, QString());   // gone for this run, at once
+    fileCopies().remove(account);
     if (anyVehicleArmed()) {
         // The store is cleaned at the next call with no vehicle armed, or at
         // exit if none is armed then.
@@ -825,11 +1058,37 @@ void setArmedProbe(ArmedProbe probe)
     g_armedProbe = probe;
 }
 
+QString entryLabel(const QString &account)
+{
+    if (entryName(account) == QLatin1String("TAK password")) {
+        return QStringLiteral("RotorLab GC TAK password");
+    }
+    return QStringLiteral("RotorLab GC Device Key (%1)").arg(account);
+}
+
+bool heldWhileArmed()
+{
+    return anyVehicleArmed();
+}
+
 void dropCache()
 {
     KeyCache &c = keyCache();
     QMutexLocker lock(&c.mutex);
     c.keys.clear();
+}
+
+void eraseUnitTestAccounts()
+{
+#ifdef QGC_UNITTEST_BUILD
+    KeyCache &c = keyCache();
+    QMutexLocker lock(&c.mutex);
+    for (const QString &a : std::as_const(c.unitTestAccounts)) {
+        platformErase(a);
+        c.keys.remove(a);
+    }
+    c.unitTestAccounts.clear();
+#endif
 }
 
 } // namespace Credential

@@ -134,7 +134,10 @@ Result dispatch(Vehicle *veh, Verb verb, double lat, double lon,
 
     switch (verb) {
     case Verb::Goto: {
-        if (std::isnan(lat) || std::isnan(lon)) {
+        // Backstop for both routes (G39): no NaN, out-of-range or exact
+        // 0, 0 point (the CoT "unknown" position) goes to the autopilot.
+        if (!std::isfinite(lat) || !std::isfinite(lon) || std::abs(lat) > 90.0 || std::abs(lon) > 180.0
+            || (lat == 0.0 && lon == 0.0)) {
             return {false, QStringLiteral("GOTO needs a position")};
         }
         if (haveSpd && speedMs > 0.0) {

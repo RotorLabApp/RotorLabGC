@@ -338,6 +338,7 @@ ApplicationWindow {
                 toolDrawer.visible = false
                 mainWindow.showPlanView()
                 planView._planMasterController.loadFromFile(filePath)
+                planView._planMasterController.fitViewportToItems()     // as a plan opened from a file (G98 M-9 nit)
             }
             if (planView._planMasterController.dirty) {
                 mainWindow.showMessageDialog(
@@ -398,6 +399,16 @@ ApplicationWindow {
             active:                     LicenseManager.activated && TAKManager.bannerAlerts.length > 0
             visible:                    active && _flyViewShowing
             source:                     "qrc:/custom/tak/RemoteCommandBanner.qml"
+        }
+
+        // RotorLab GC: one line while ATAK command markers are being dropped
+        // (same counts as the TAK page notice; clears a minute after the last
+        // drop). Fly view only, like the banner above (5.1.2 review L2).
+        Loader {
+            anchors.horizontalCenter:   parent.horizontalCenter
+            active:                     LicenseManager.activated && TAKManager.flyDropNotice !== ""
+            visible:                    active && _flyViewShowing
+            source:                     "qrc:/custom/tak/CommandDropLine.qml"
         }
 
         // RotorLab GC: the checklist offer. A card, not a modal - the crew opens
@@ -811,14 +822,49 @@ ApplicationWindow {
     //-------------------------------------------------------------------------
     //-- Critical Vehicle Message Popup
 
-    function showCriticalVehicleMessage(message) {
+    // G103: titled messages (such as "Video") are not kept by the vehicle, so one that arrives while
+    // the banner is busy waits here and is shown when the banner closes.
+    property var _pendingTitledMessages: []
+
+    Connections {
+        target: QGroundControl.videoManager
+        function onFullScreenChanged() { Qt.callLater(mainWindow._showNextTitledMessage) }
+    }
+
+    function _showNextTitledMessage() {
+        if (_pendingTitledMessages.length === 0 || criticalVehicleMessagePopup.visible || QGroundControl.videoManager.fullScreen) {
+            return
+        }
+        var next = _pendingTitledMessages[0]
+        _pendingTitledMessages = _pendingTitledMessages.slice(1)
+        showCriticalVehicleMessage(next.message, next.title)
+    }
+
+    // title: banner heading; empty or not given keeps "Vehicle Error" (G83)
+    function showCriticalVehicleMessage(message, title) {
         closeIndicatorDrawer()
         if (criticalVehicleMessagePopup.visible || QGroundControl.videoManager.fullScreen) {
+            if (title) {
+                // Not a vehicle message: the message indicator does not hold it, so show it next (once)
+                for (var i = 0; i < _pendingTitledMessages.length; i++) {
+                    if (_pendingTitledMessages[i].message === message && _pendingTitledMessages[i].title === title) {
+                        return
+                    }
+                }
+                if (!(criticalVehicleMessagePopup.visible && criticalVehicleMessagePopup.criticalVehicleMessage === message
+                      && criticalVehicleMessagePopup.criticalVehicleTitle === title)) {
+                    _pendingTitledMessages = _pendingTitledMessages.concat([{ message: message, title: title }])
+                }
+                return
+            }
             // We received additional warning message while an older warning message was still displayed.
             // When the user close the older one drop the message indicator tool so they can see the rest of them.
             criticalVehicleMessagePopup.additionalCriticalMessagesReceived = true
         } else {
             criticalVehicleMessagePopup.criticalVehicleMessage      = message
+            criticalVehicleMessagePopup.criticalVehicleTitle        = title ? title : qsTr("Vehicle Error")
+            // G67: only a vehicle message (no title given) clears the vehicle's error count when dismissed
+            criticalVehicleMessagePopup.isVehicleMessage            = !title
             criticalVehicleMessagePopup.additionalCriticalMessagesReceived = false
             criticalVehicleMessagePopup.open()
         }
@@ -835,6 +881,11 @@ ApplicationWindow {
 
         property alias  criticalVehicleMessage:             criticalVehicleMessageText.text
         property bool   additionalCriticalMessagesReceived: false
+        property string criticalVehicleTitle:               qsTr("Vehicle Error")
+        property bool   isVehicleMessage:                   true
+
+        // G103: a titled message that waited while this banner was up is shown next
+        onClosed: Qt.callLater(mainWindow._showNextTitledMessage)
 
         background: Rectangle {
             anchors.fill:   parent
@@ -859,7 +910,7 @@ ApplicationWindow {
                 QGCLabel {
                     id:                 vehicleWarningLabel
                     anchors.centerIn:   parent
-                    text:               qsTr("Vehicle Error")
+                    text:               criticalVehicleMessagePopup.criticalVehicleTitle
                     font.pointSize:     ScreenTools.smallFontPointSize
                     color:              qgcPal.alertText
                 }
@@ -906,7 +957,8 @@ ApplicationWindow {
                 if (criticalVehicleMessagePopup.additionalCriticalMessagesReceived) {
                     criticalVehicleMessagePopup.additionalCriticalMessagesReceived = false;
                     flyView.dropMainStatusIndicatorTool();
-                } else {
+                } else if (criticalVehicleMessagePopup.isVehicleMessage && QGroundControl.multiVehicleManager.activeVehicle) {
+                    // A "Video" banner closes without touching the vehicle (G67)
                     QGroundControl.multiVehicleManager.activeVehicle.resetErrorLevelMessages();
                 }
             }

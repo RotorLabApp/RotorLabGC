@@ -192,6 +192,12 @@ public:
 
     Q_INVOKABLE SendToVehiclePreCheckState sendToVehiclePreCheck(void);
 
+    /// Returns true if a Plan made for planVehicleType may be uploaded to a vehicle reporting vehicleType without
+    /// the firmware/vehicle mismatch prompt. vehicleIsVtolCapable is true when the vehicle can fly VTOL items even
+    /// though its heartbeat type is not a VTOL type (for example an ArduPlane QuadPlane with Q_ENABLE set, which
+    /// reports MAV_TYPE_FIXED_WING while Q_MAV_TYPE is left at its default of 0).
+    static bool planVehicleClassMatches(MAV_TYPE planVehicleType, MAV_TYPE vehicleType, bool vehicleIsVtolCapable);
+
     /// Determines if the mission has all data needed to be saved or sent to the vehicle.
     /// IMPORTANT NOTE: The return value is a VisualMissionItem::ReadForSaveState value. It is an int here to work around
     /// a nightmare of circular header dependency problems.
@@ -357,13 +363,14 @@ private:
     void                    _updateBatteryInfo                  (int waypointIndex);
     bool                    _loadItemsFromJson                  (const QJsonObject& json, QmlObjectListModel* visualItems, QString& errorString);
     void                    _initLoadedVisualItems              (QmlObjectListModel* loadedVisualItems);
-    FlightPathSegment*      _addFlightPathSegment               (FlightPathSegmentHashTable& prevItemPairHashTable, VisualItemPair& pair, bool mavlinkTerrainFrame);
+    FlightPathSegment*      _addFlightPathSegment               (FlightPathSegmentHashTable& prevItemPairHashTable, VisualItemPair& pair, bool mavlinkTerrainFrame, VisualMissionItem* launchTakeoff = nullptr, bool rtlLeg = false);
+    bool                    _queryLegTerrain                    (void) const;
     void                    _addTimeDistance                    (bool vtolInHover, double hoverTime, double cruiseTime, double extraTime, double distance, int seqNum);
     VisualMissionItem*      _insertSimpleMissionItemWorker      (QGeoCoordinate coordinate, MAV_CMD command, int visualItemIndex, bool makeCurrentItem);
     void                    _insertComplexMissionItemWorker     (const QGeoCoordinate& mapCenterCoordinate, ComplexMissionItem* complexItem, int visualItemIndex, bool makeCurrentItem);
     bool                    _isROIBeginItem                     (SimpleMissionItem* simpleItem);
     bool                    _isROICancelItem                    (SimpleMissionItem* simpleItem);
-    FlightPathSegment*      _createFlightPathSegmentWorker      (VisualItemPair& pair, bool mavlinkTerrainFrame);
+    FlightPathSegment*      _createFlightPathSegmentWorker      (VisualItemPair& pair, bool mavlinkTerrainFrame, VisualMissionItem* launchTakeoff = nullptr, bool rtlLeg = false);
     void                    _allItemsRemoved                    (void);
     void                    _firstItemAdded                     (void);
 

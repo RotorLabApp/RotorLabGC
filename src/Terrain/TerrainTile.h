@@ -10,6 +10,8 @@
 #pragma once
 
 #include <QtCore/QList>
+#include <cstdint>
+#include <limits>
 #include <QtCore/QLoggingCategory>
 
 class QGeoCoordinate;
@@ -22,6 +24,10 @@ class TerrainTile
     friend class TerrainTileTest;
 
 public:
+    /// Stored in the int16 grid for a cell with no known elevation (null or missing in the source data).
+    /// elevation() returns NaN for such a cell, never 0.
+    static constexpr int16_t kUnknownElevation = std::numeric_limits<int16_t>::min();
+
     /// Constructor from serialized elevation data (either from file or web)
     ///    @param document
     explicit TerrainTile(const QByteArray &byteArray);

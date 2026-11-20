@@ -16,7 +16,7 @@ See CONTRIBUTING.md. RotorLab decides if and when this changes.
 ## Checklist
 
 - [ ] There is an issue for this change.
-- [ ] Nothing here lets a command reach an aircraft past the station's switches, or holds up arming, a launch or video.
+- [ ] Nothing here lets a command reach an aircraft past the station's switches, or holds up arming or a launch.
 - [ ] No license key, Device Key, TAK certificate or password, flight log, personal data or real host name anywhere in the change.
 - [ ] US spelling, no em dashes, and no claim that GC or RotorLab authorizes, approves or clears a flight.
 

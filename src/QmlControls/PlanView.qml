@@ -42,6 +42,17 @@ Item {
     readonly property bool  _waypointsOnlyMode:         QGroundControl.corePlugin.options.missionWaypointsOnly
 
     property var    _planMasterController:              planMasterController
+    // G64: Plan view 3D (Windows and Linux builds only; RLPlan3DAvailable is false on Android)
+    property bool   _plan3DOpen:                        false
+
+    function setPlan3DOpen(open) {
+        _plan3DOpen = open && RLPlan3DAvailable
+        // G67: the map's add-on-click tools cannot be armed while the map is
+        // hidden, and none stays armed for the next map click.
+        if (_plan3DOpen) {
+            toolStrip.allAddClickBoolsOff()
+        }
+    }
     property var    _missionController:                 _planMasterController.missionController
     property var    _geoFenceController:                _planMasterController.geoFenceController
     property var    _rallyPointController:              _planMasterController.rallyPointController
@@ -341,6 +352,7 @@ Item {
         FlightMap {
             id:                         editorMap
             anchors.fill:               parent
+            visible:                    !_plan3DOpen   // G64: the 3D view replaces the map while open
             mapName:                    "MissionEditor"
             allowGCSLocationCenter:     true
             allowVehicleLocationCenter: true
@@ -549,6 +561,28 @@ Item {
         }
 
         //-----------------------------------------------------------
+        // G64: read-only 3D view of the plan, over the map area (Windows and Linux only)
+        Loader {
+            id:             plan3DLoader
+            anchors.fill:   editorMap
+            active:         RLPlan3DAvailable && (_plan3DOpen || RLPlan3DAutorun)
+            visible:        _plan3DOpen
+            source:         RLPlan3DAvailable ? "qrc:/rotorlab/plan3d/Plan3DView.qml" : ""
+            onLoaded: {
+                item.planMasterController = _planMasterController
+                item.planView = _root
+                item.open = Qt.binding(function() { return _plan3DOpen })
+                // G65 (E-5): 3D edits only on the mission layer, as in 2D.
+                item.editingAllowed = Qt.binding(function() { return _editingLayer == _layerMission })
+                // RotorLab 5.3.0 review: the view centers its hint, edit panel,
+                // edit message and Fit / Top in the part not under the tool
+                // strip or the right panel.
+                item.leftInset = Qt.binding(function() { return toolStrip.x + toolStrip.width })
+                item.rightInset = Qt.binding(function() { return rightPanel.width + _toolsMargin })
+            }
+        }
+
+        //-----------------------------------------------------------
         // Left tool strip
         ToolStrip {
             id:                 toolStrip
@@ -597,14 +631,14 @@ Item {
                         id:                 addWaypointRallyPointAction
                         text:               _editingLayer == _layerRallyPoints ? qsTr("Rally Point") : qsTr("Waypoint")
                         iconSource:         "/qmlimages/MapAddMission.svg"
-                        enabled:            toolStrip._isRallyLayer ? true : _missionController.flyThroughCommandsAllowed
+                        enabled:            !_plan3DOpen && (toolStrip._isRallyLayer ? true : _missionController.flyThroughCommandsAllowed)
                         visible:            toolStrip._isRallyLayer || toolStrip._isMissionLayer || toolStrip._isUtmspLayer
                         checkable:          true
                     },
                     ToolStripAction {
                         text:               _missionController.isROIActive ? qsTr("Cancel ROI") : qsTr("ROI")
                         iconSource:         "/qmlimages/MapAddMission.svg"
-                        enabled:            !_missionController.onlyInsertTakeoffValid
+                        enabled:            !_plan3DOpen && !_missionController.onlyInsertTakeoffValid
                         visible:            toolStrip._isMissionLayer && _planMasterController.controllerVehicle.roiModeSupported
                         checkable:          !_missionController.isROIActive
                         onCheckedChanged:   _addROIOnClick = checked
@@ -647,9 +681,17 @@ Item {
                     ToolStripAction {
                         text:               qsTr("Center")
                         iconSource:         "/qmlimages/MapCenter.svg"
-                        enabled:            true
+                        enabled:            !_plan3DOpen    // G67: centers the hidden 2D map only
                         visible:            true
                         dropPanelComponent: centerMapDropPanel
+                    },
+                    ToolStripAction {
+                        // G64: 3D toggle, Windows and Linux builds only
+                        text:               _plan3DOpen ? qsTr("2D") : qsTr("3D")
+                        iconSource:         "/qmlimages/Viewer3D/City3DMapIcon.svg"
+                        enabled:            true
+                        visible:            RLPlan3DAvailable
+                        onTriggered:        setPlan3DOpen(!_plan3DOpen)
                     }
                 ]
             }
@@ -830,8 +872,8 @@ Item {
             readonly property string _licenseString: QGroundControl.elevationProviderNotice
 
             id:                         licenseLabel
-            visible:                    terrainStatus.visible && _licenseString !== ""
-            anchors.bottom:             terrainStatus.top
+            visible:                    (terrainStatus.visible || _plan3DOpen) && _licenseString !== ""
+            anchors.bottom:             _plan3DOpen ? parent.bottom : terrainStatus.top
             anchors.horizontalCenter:   terrainStatus.horizontalCenter
             anchors.bottomMargin:       ScreenTools.defaultFontPixelWidth * 0.5
             font.pointSize:             ScreenTools.smallFontPointSize
@@ -847,7 +889,9 @@ Item {
             anchors.bottom:     parent.bottom
             height:             ScreenTools.defaultFontPixelHeight * 7
             missionController:  _missionController
-            visible:            _internalVisible && _editingLayer === _layerMission && QGroundControl.corePlugin.options.showMissionStatus
+            // G67 visual M4: hidden while the 3D view is open. The profile colors
+            // by GC's 2D rule (CL-8), which differs from the 3D colors.
+            visible:            !_plan3DOpen && _internalVisible && _editingLayer === _layerMission && QGroundControl.corePlugin.options.showMissionStatus
 
             onSetCurrentSeqNum: _missionController.setCurrentPlanViewSeqNum(seqNum, true)
 
@@ -861,6 +905,7 @@ Item {
 
         MapScale {
             id:                     mapScale
+            visible:                !_plan3DOpen   // G64: the 2D zoom buttons and scale bar do not apply to the 3D view
             anchors.margins:        _toolsMargin
             anchors.bottom:         terrainStatus.visible ? terrainStatus.top : parent.bottom
             anchors.left:           toolStrip.y + toolStrip.height + _toolsMargin > mapScale.y ? toolStrip.right: parent.left

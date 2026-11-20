@@ -1,17 +1,32 @@
 #include "TakManagerTest.h"
 
+#include "tak/CoTMessage.h"
 #include "tak/TakDefaults.h"
 #include "tak/TakManager.h"
+#include "rotorlab/Credential.h"
 
 #include <QtCore/QDateTime>
+#include <QtCore/QDir>
 #include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QMap>
 #include <QtCore/QSettings>
+#include <QtCore/QStandardPaths>
+#include <QtCore/QTemporaryDir>
+#include <QtNetwork/QHostAddress>
+#include <QtNetwork/QTcpServer>
 #include <QtCore/QXmlStreamReader>
 #include <QtTest/QSignalSpy>
 #include <QtTest/QTest>
+
+#ifdef Q_OS_WIN
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <aclapi.h>
+#endif
 
 static void clearTakSettings()
 {
@@ -35,6 +50,10 @@ void TakManagerTest::init()
 void TakManagerTest::cleanup()
 {
     clearTakSettings();
+    // The test-only key-store entry (TakManager::passwordAccount() is a
+    // per-process unit-test name in this build), never the real one.
+    QVERIFY(TakManager::passwordAccount().startsWith(QStringLiteral("Unit test ")));
+    Credential::erase(TakManager::passwordAccount());
     UnitTest::cleanup();
 }
 
@@ -183,6 +202,8 @@ void TakManagerTest::_testCommandIsListed()
 void TakManagerTest::_testCommandStationChecks()
 {
     TakManager tak;
+    tak._callsignPrefix = QStringLiteral("RLTEST");
+    tak._prefixSetFor   = QStringLiteral("RLTEST");
     tak._c2Allowed = true;
     tak.setC2Armed(true);
     tak._verbHold = true;
@@ -202,10 +223,13 @@ void TakManagerTest::_testCommandStationChecks()
     QVERIFY2(line.contains(QStringLiteral("rotorlab-station-test")), qPrintable(line));
 
     // 3. Test identity listed: it passes the sender check and reaches the
-    //    aircraft lookup (no aircraft connected here).
+    //    aircraft lookup (no aircraft connected here) when it names this
+    //    station's aircraft (G47). A bare number names no station.
     tak.addApprovedPilotAs(TakPolicy::testSenderUid(), QStringLiteral("uid"));
+    line = tak.injectTestCommand(QStringLiteral("HOLD RLTEST-1"));
+    QVERIFY2(line.contains(QStringLiteral("no aircraft RLTEST-1 is connected to this station")), qPrintable(line));
     line = tak.injectTestCommand(QStringLiteral("HOLD 1"));
-    QVERIFY2(line.contains(QStringLiteral("no matching tracks")), qPrintable(line));
+    QVERIFY2(line.contains(QStringLiteral("the marker does not name a station")), qPrintable(line));
 
     // 4. A disabled verb is refused after the sender check.
     line = tak.injectTestCommand(QStringLiteral("LAND 1"));
@@ -285,7 +309,7 @@ void TakManagerTest::_altitudeWarningInforms()
 void TakManagerTest::_presenceOnConnect()
 {
     TakManager tak;
-    tak._callsignPrefix = QStringLiteral("ROTOR");
+    tak._callsignPrefix = QStringLiteral("RLTEST");
     tak._commandEnabled = true;
     tak._publishEnabled = false;
     // A real station location is set; with publishing off it is not shared.
@@ -337,7 +361,7 @@ void TakManagerTest::_presenceOnConnect()
 
     // The station's TAK identity, and nothing about any drone.
     QCOMPARE(el.value(QStringLiteral("contact")).value(QStringLiteral("callsign")).toString(),
-             QStringLiteral("ROTOR-GCS"));
+             QStringLiteral("RLTEST-GCS"));
     QVERIFY(names.contains(QStringLiteral("takv")));
     QVERIFY(!names.contains(QStringLiteral("link")));
     QVERIFY(!names.contains(QStringLiteral("__video")));
@@ -416,6 +440,7 @@ constexpr double kStationLat = -35.363261;
 
 void TakManagerTest::setStationPosition(TakManager &tak)
 {
+    tak._shareStationPosition = true;   // the operator turned sharing on
     tak._gcsManual    = true;
     tak._gcsManualLat = kStationLat;
     tak._gcsManualLon = 149.165230;
@@ -468,6 +493,7 @@ void TakManagerTest::_presenceBeforeFirstFix()
     tak._commandEnabled   = true;
     tak._publishEnabled   = true;
     tak._publishGcsBeacon = true;
+    tak._shareStationPosition = true;
     tak._gcsManual        = false;
     if (tak._effectiveGcsPosition().isValid()) {
         QSKIP("this machine reports a ground station position");
@@ -601,12 +627,196 @@ void TakManagerTest::_presenceAtOnceOnChange()
     pub.disconnectServer();
 }
 
+// ---------------------------------------------------------------------------
+// m4086: the GCS beacon shares the station position only when the operator
+// turned "Share this station's position with the TAK server" on.
+// ---------------------------------------------------------------------------
+
+namespace {
+/// The station events among those written, as raw XML.
+QList<QByteArray> stationXml(const QString &gcsUid, const QList<QByteArray> &sent)
+{
+    QList<QByteArray> out;
+    for (const QByteArray &xml : sent) {
+        if (CoT::parse(xml).uid == gcsUid) {
+            out << xml;
+        }
+    }
+    return out;
+}
+} // namespace
+
+void TakManagerTest::_sharePositionDefaultOff()
+{
+    QCOMPARE(TakDefaults::shareStationPosition, false);
+    {
+        TakManager tak;   // a new install: no saved TAK settings
+        QVERIFY(!tak._shareStationPosition);
+        QVERIFY(!tak.property("shareStationPosition").toBool());
+    }
+    clearTakSettings();
+    // An upgraded install: TAK settings saved by an older version, which
+    // never wrote this key, with the beacon and a manual location on.
+    {
+        QSettings s;
+        s.beginGroup(QStringLiteral("TAK"));
+        s.setValue(QStringLiteral("publishEnabled"), true);
+        s.setValue(QStringLiteral("publishGcsBeacon"), true);
+        s.setValue(QStringLiteral("gcsManual"), true);
+        s.setValue(QStringLiteral("gcsManualLat"), kStationLat);
+        s.setValue(QStringLiteral("gcsManualLon"), 149.165230);
+        s.endGroup();
+        s.sync();
+    }
+    {
+        TakManager tak;
+        QVERIFY(tak._publishGcsBeacon);
+        QVERIFY(tak._gcsManual);
+        QVERIFY(!tak._shareStationPosition);
+        QVERIFY(!tak._beaconPosition().isValid());
+        QVERIFY(tak.gcsPositionText().startsWith(QStringLiteral("position not shared")));
+        // Turned on: saved and kept.
+        tak._shareStationPosition = true;
+        tak._persist();
+    }
+    TakManager reloaded;
+    QVERIFY(reloaded._shareStationPosition);
+}
+
+void TakManagerTest::_beaconWithoutPositionWhenOff()
+{
+    // Publishing and the beacon on, a real station location set, sharing off
+    // (the default): the beacon still goes out every tick, with the CoT
+    // unknown point and nothing of the location.
+    TakManager tak;
+    tak._recordSent       = true;
+    tak._callsignPrefix   = QStringLiteral("RLTEST");
+    tak._commandEnabled   = true;
+    tak._publishEnabled   = true;
+    tak._publishGcsBeacon = true;
+    setStationPosition(tak);
+    tak._shareStationPosition = false;
+    QVERIFY(tak._effectiveGcsPosition().isValid());
+    QVERIFY(tak._beaconAnnounces());
+    QVERIFY(!tak._presenceNeeded());   // the beacon is the presence
+
+    tak._onEncrypted();
+    tak._publishTick();
+    const QList<QByteArray> sent = stationXml(tak._gcsUid, tak._sentEvents);
+    QVERIFY(sent.size() >= 2);
+    for (const QByteArray &xml : sent) {
+        QVERIFY2(!xml.contains("-35.36"), xml.constData());
+        QVERIFY2(!xml.contains("149.16"), xml.constData());
+        QVERIFY(!xml.contains("precisionlocation"));
+        QVERIFY(xml.contains("callsign=\"RLTEST-GCS\""));
+        QVERIFY(xml.contains("<takv"));
+    }
+    for (const StationEvent &e : stationEvents(tak._gcsUid, tak._sentEvents)) {
+        QCOMPARE(e.how, QStringLiteral("h-g-i-g-o"));
+        QCOMPARE(e.lat, 0.0);
+        QCOMPARE(e.hae, 9999999.0);
+        QVERIFY(!e.direct);
+    }
+    // The point is the full unknown point.
+    const CoT::Marker m = CoT::parse(sent.first());
+    QCOMPARE(m.uid, tak._gcsUid);
+    QCOMPARE(m.lat, 0.0);
+    QCOMPARE(m.lon, 0.0);
+    QVERIFY2(sent.first().contains("hae=\"9999999.0\" ce=\"9999999.0\" le=\"9999999.0\""),
+             sent.first().constData());
+
+    // Sharing on, then off again mid-link: the last real point is not kept.
+    tak._shareStationPosition = true;
+    tak._publishTick();
+    QVERIFY(tak._lastBeaconPos.isValid());
+    tak._shareStationPosition = false;
+    emit tak.configChanged();
+    tak._sentEvents.clear();
+    tak._publishTick();
+    QVERIFY(!tak._lastBeaconPos.isValid());
+    const QList<StationEvent> after = stationEvents(tak._gcsUid, tak._sentEvents);
+    QCOMPARE(int(after.size()), 1);
+    QCOMPARE(after.first().how, QStringLiteral("h-g-i-g-o"));
+    QCOMPARE(after.first().lat, 0.0);
+    tak.disconnectServer();
+}
+
+void TakManagerTest::_beaconPositionWhenOn()
+{
+    TakManager tak;
+    tak._recordSent       = true;
+    tak._publishEnabled   = true;
+    tak._publishGcsBeacon = true;
+    setStationPosition(tak);   // sharing on
+    QVERIFY(tak._shareStationPosition);
+    tak._onEncrypted();
+    tak._publishTick();
+    const QList<StationEvent> ev = stationEvents(tak._gcsUid, tak._sentEvents);
+    QVERIFY(!ev.isEmpty());
+    for (const StationEvent &e : ev) {
+        QCOMPARE(e.how, QStringLiteral("m-g"));
+        QCOMPARE(e.lat, kStationLat);
+        QCOMPARE(e.hae, 584.0);
+    }
+    const QList<QByteArray> sent = stationXml(tak._gcsUid, tak._sentEvents);
+    QVERIFY(sent.first().contains("149.16"));
+    QVERIFY(sent.first().contains("precisionlocation"));
+    QVERIFY(tak.gcsPositionText().startsWith(QStringLiteral("manual:")));
+    tak.disconnectServer();
+}
+
+void TakManagerTest::_conflictSeenWithSharingOff()
+{
+    // Station A, sharing off: its position-free beacon.
+    TakManager a;
+    a._recordSent       = true;
+    a._callsignPrefix   = QStringLiteral("RLTEST");
+    a._gcsUid           = QStringLiteral("rotorlab-aaaaaaaaaaaa");
+    a._publishEnabled   = true;
+    a._publishGcsBeacon = true;
+    setStationPosition(a);
+    a._shareStationPosition = false;
+    a._onEncrypted();
+    const QList<QByteArray> beacon = stationXml(a._gcsUid, a._sentEvents);
+    QVERIFY(!beacon.isEmpty());
+    QVERIFY(!beacon.first().contains("-35.36"));
+    a.disconnectServer();
+
+    // The beacon parses as a device report.
+    const CoT::Marker m = CoT::parse(beacon.first());
+    QVERIFY(m.isEud);
+    QCOMPARE(m.callsign, QStringLiteral("RLTEST-GCS"));
+
+    // Station B on the same prefix sees the conflict.
+    TakManager b;
+    b._callsignPrefix = QStringLiteral("RLTEST");
+    b._prefixSetFor   = QStringLiteral("RLTEST");
+    b._gcsUid         = QStringLiteral("rotorlab-bbbbbbbbbbbb");
+    b._commandEnabled = true;
+    b._approvedOnly   = false;
+    QVERIFY(!b._prefixConflictActive());
+    b._handleMarker(beacon.first());
+    QVERIFY(b._prefixConflictActive());
+    QVERIFY(!b.prefixConflictNotice().isEmpty());
+
+    // Station C on another prefix records A's prefix as in use.
+    TakManager c;
+    c._callsignPrefix = QStringLiteral("BRAVO");
+    c._prefixSetFor   = QStringLiteral("BRAVO");
+    c._gcsUid         = QStringLiteral("rotorlab-cccccccccccc");
+    c._commandEnabled = true;
+    c._approvedOnly   = false;
+    c._handleMarker(beacon.first());
+    QVERIFY(!c._prefixConflictActive());
+    QVERIFY(c._prefixLastSeenElsewhere(QStringLiteral("RLTEST")) > 0);
+}
+
 void TakManagerTest::_ownUidsExact()
 {
     TakManager tak;
-    tak._callsignPrefix = QStringLiteral("ROTOR");
+    tak._callsignPrefix = QStringLiteral("RLTEST");
     tak._onEncrypted();
-    tak._ownUids.insert(QStringLiteral("ROTOR-1"));   // a drone this station published
+    tak._ownUids.insert(QStringLiteral("RLTEST-1"));   // a drone this station published
     auto ev = [](const QString &uid) {
         return QStringLiteral("<event version=\"2.0\" uid=\"%1\" type=\"a-f-A-M-H-Q\" how=\"m-g\">"
                               "<point lat=\"1\" lon=\"2\" hae=\"0\" ce=\"9\" le=\"9\"/><detail/></event>")
@@ -614,10 +824,10 @@ void TakManagerTest::_ownUidsExact()
     };
     QSignalSpy spy(&tak, &TakManager::cotReceivedChanged);
     tak._noteReceived(ev(tak._gcsUid));
-    tak._noteReceived(ev(QStringLiteral("ROTOR-1")));
+    tak._noteReceived(ev(QStringLiteral("RLTEST-1")));
     QVERIFY(!tak.cotReceivedSinceConnect());
     // Another station with the same prefix is CoT received.
-    tak._noteReceived(ev(QStringLiteral("ROTOR-2")));
+    tak._noteReceived(ev(QStringLiteral("RLTEST-2")));
     QVERIFY(tak.cotReceivedSinceConnect());
     QCOMPARE(spy.count(), 1);
     // A new link starts over.
@@ -634,6 +844,7 @@ void TakManagerTest::_openSenderWarning()
     QVERIFY(tak.openSenderWarning().isEmpty());      // list on by default
     tak._approvedOnly = false;
     tak._c2Allowed    = true;
+    tak._prefixSetFor = tak._callsignPrefix;   // set on this install (security M1)
     tak.setC2Armed(true);
     QCOMPARE(tak.openSenderWarning(), QStringLiteral("Any sender on this TAK server can command the aircraft."));
     QVERIFY(spy.count() >= 1);
@@ -720,4 +931,587 @@ void TakManagerTest::_savedSettingsKept()
     QVERIFY(!tak._approvedOnly);
     QCOMPARE(tak._altWarnAboveFt, 400.0);
     QVERIFY(!tak._verbRtl);   // not saved: the default
+}
+
+// ---------------------------------------------------------------------------
+// GC 5.1.2 (TAK link): G40, G41, G45, G46
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// A point an ATAK user placed and sent to `dest` (a placed marker: p-p
+/// creator link, human "how", not stale).
+QByteArray sendToEvent(const QString &dest, const QString &uid)
+{
+    const QDateTime now = QDateTime::currentDateTimeUtc();
+    return QStringLiteral(
+               "<event version=\"2.0\" uid=\"%4\" type=\"a-u-G\" how=\"h-g-i-g-o\" "
+               "time=\"%1\" start=\"%1\" stale=\"%2\">"
+               "<point lat=\"37.7700\" lon=\"-122.4900\" hae=\"10\" ce=\"5\" le=\"5\"/>"
+               "<detail><contact callsign=\"Waypoint 7\"/>"
+               "<link uid=\"ANDROID-g40test\" relation=\"p-p\" type=\"a-f-G-U-C\" parent_callsign=\"KESTREL\"/>"
+               "<marti><dest callsign=\"%3\"/></marti></detail></event>")
+        .arg(now.toString(Qt::ISODateWithMs), now.addSecs(300).toString(Qt::ISODateWithMs), dest, uid)
+        .toUtf8();
+}
+
+bool anyLine(const QSignalSpy &spy, const QString &part)
+{
+    for (const QList<QVariant> &args : spy) {
+        if (args.value(0).toString().contains(part)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+void TakManagerTest::_sendToFollowsFleetCallsign()
+{
+    TakManager tak;
+    tak._callsignPrefix    = QStringLiteral("RLTEST");
+    tak._prefixSetFor      = QStringLiteral("RLTEST");
+    tak._commandEnabled    = true;
+    tak._c2Allowed         = true;
+    tak.setC2Armed(true);
+    tak._verbGoto          = true;
+    tak._approvedOnly      = false;
+    tak._dronesAddressable = true;
+
+    // Control: no Fleet callsign, addressing on. The point is read (no
+    // aircraft here, so it is listed as not sent).
+    {
+        QSignalSpy log(&tak, &TakManager::logMessage);
+        tak._handleMarker(sendToEvent(QStringLiteral("RLTEST-3"), QStringLiteral("marker-g40-1")));
+        QCOMPARE(int(tak.remoteCommands().size()), 1);
+        QVERIFY(!anyLine(log, QStringLiteral("is not read")));
+    }
+    tak.clearRemoteCommands();
+
+    // Aircraft 3 publishes the Fleet callsign HAWK: RLTEST-3 is not its name.
+    tak._fleet[3].callsign = QStringLiteral("HAWK");
+    {
+        QSignalSpy log(&tak, &TakManager::logMessage);
+        tak._handleMarker(sendToEvent(QStringLiteral("RLTEST-3"), QStringLiteral("marker-g40-2")));
+        QCOMPARE(int(tak.remoteCommands().size()), 0);
+        QVERIFY(anyLine(log, QStringLiteral("point sent to RLTEST-3 is not read: aircraft 3 is published as HAWK")));
+    }
+    // Another aircraft without a Fleet callsign is still addressable.
+    tak._handleMarker(sendToEvent(QStringLiteral("RLTEST-4"), QStringLiteral("marker-g40-3")));
+    QCOMPARE(int(tak.remoteCommands().size()), 1);
+    tak.clearRemoteCommands();
+
+    // "Let ATAK address drones" off: no send-to point is read at all.
+    tak._fleet.clear();
+    tak._dronesAddressable = false;
+    {
+        QSignalSpy log(&tak, &TakManager::logMessage);
+        tak._handleMarker(sendToEvent(QStringLiteral("RLTEST-3"), QStringLiteral("marker-g40-4")));
+        QCOMPARE(int(tak.remoteCommands().size()), 0);
+        QVERIFY(anyLine(log, QStringLiteral("point sent to RLTEST-3 is not read: \"Let ATAK address drones\" is off")));
+    }
+}
+
+void TakManagerTest::_fleetJoinClosesLink()
+{
+    TakManager tak;
+    tak._prefixSetFor = tak._callsignPrefix;   // set on this install (security M1)
+    tak._c2Allowed = true;
+    tak._onEncrypted();          // a live TAK link (no socket in the test)
+    tak.setC2Armed(true);
+    QVERIFY(tak.connected());
+    QVERIFY(tak.c2Armed());
+    QVERIFY(tak.fleetHandOffNotice().isEmpty());
+
+    QSignalSpy notice(&tak, &TakManager::fleetHandOffNoticeChanged);
+    QSignalSpy log(&tak, &TakManager::logMessage);
+    tak.handOffToFleet();
+    QVERIFY(!tak.connected());
+    QVERIFY(!tak.c2Armed());
+    QVERIFY(!tak._presenceTimer.isActive());
+    QVERIFY(!tak._publishTimer.isActive());
+    QCOMPARE(notice.count(), 1);
+    QVERIFY(tak.fleetHandOffNotice().contains(QStringLiteral("The TAK link was closed")));
+    QVERIFY(tak.fleetHandOffNotice().contains(QStringLiteral("\"Commands to aircraft on\" was turned off")));
+    QVERIFY(tak.statusText().contains(QStringLiteral("Fleet Server")));
+    QVERIFY(anyLine(log, QStringLiteral("Fleet Server joined")));
+    // C2 permission and the other settings are kept; only the session arm is off.
+    QVERIFY(tak._c2Allowed);
+
+    // S4: while the Fleet Server is the route, no direct link and no
+    // commands, whoever asks.
+    QVERIFY(tak._fleetIsRoute);
+    tak._host = QStringLiteral("127.0.0.1");
+    tak._port = 9;
+    tak.connectServer();
+    QVERIFY(!tak._socket);
+    QVERIFY(tak.statusText().contains(QStringLiteral("Fleet Server")));
+    QSignalSpy armSpy(&tak, &TakManager::c2ArmedChanged);
+    tak.setC2Armed(true);
+    QVERIFY(!tak.c2Armed());
+    QCOMPARE(armSpy.count(), 1);   // the switch is told it stayed off
+    QVERIFY(anyLine(log, QStringLiteral("\"Commands to aircraft on\" not turned on")));
+
+    // Nothing live: nothing to say.
+    tak.clearFleetHandOff();
+    QVERIFY(!tak._fleetIsRoute);
+    QVERIFY(tak.fleetHandOffNotice().isEmpty());
+    tak.handOffToFleet();
+    QVERIFY(tak.fleetHandOffNotice().isEmpty());
+    QVERIFY(tak._fleetIsRoute);
+
+    // Armed without a link: the switch is still turned off.
+    tak.clearFleetHandOff();
+    tak.setC2Armed(true);
+    QVERIFY(tak.c2Armed());
+    tak.handOffToFleet();
+    QVERIFY(!tak.c2Armed());
+    QVERIFY(!tak.fleetHandOffNotice().isEmpty());
+    QVERIFY(!tak.fleetHandOffNotice().contains(QStringLiteral("TAK link was closed")));
+}
+
+void TakManagerTest::_verifyOffLogged()
+{
+    TakManager tak;
+    QVERIFY(tak.verifyPeer());   // default on
+    QSignalSpy log(&tak, &TakManager::logMessage);
+    tak.setVerifyPeer(false);
+    QVERIFY(!tak.verifyPeer());
+    QVERIFY(anyLine(log, QStringLiteral("\"Verify server certificate\" turned off")));
+    tak.setVerifyPeer(true);
+    QVERIFY(anyLine(log, QStringLiteral("\"Verify server certificate\" turned on")));
+
+    // Each connect with it off says so again.
+    tak.setVerifyPeer(false);
+    tak._host = QStringLiteral("127.0.0.1");
+    tak._port = 9;
+    log.clear();
+    tak.connectServer();
+    QVERIFY(anyLine(log, QStringLiteral("connecting with \"Verify server certificate\" off")));
+    tak.disconnectServer();
+}
+
+void TakManagerTest::_passwordMovedToKeyStore()
+{
+    const QString account = TakManager::passwordAccount();
+    QVERIFY(account.startsWith(QStringLiteral("Unit test ")));
+    Credential::erase(account);
+    {
+        // What 5.1.1 and earlier left: the password in plain text.
+        QSettings s;
+        s.setValue(QStringLiteral("TAK/username"), QStringLiteral("kestrel"));
+        s.setValue(QStringLiteral("TAK/password"), QStringLiteral("unit-test-not-a-real-password"));
+        s.sync();
+    }
+    {
+        TakManager tak;
+        QCOMPARE(tak._password, QStringLiteral("unit-test-not-a-real-password"));
+        QSettings s;
+        QVERIFY(!s.contains(QStringLiteral("TAK/password")));
+        QCOMPARE(s.value(QStringLiteral("TAK/username")).toString(), QStringLiteral("kestrel"));
+        if (Credential::inOsStore()) {
+            QCOMPARE(Credential::load(account), QStringLiteral("unit-test-not-a-real-password"));
+            QVERIFY(tak.passwordStorageText().contains(Credential::storeName()));
+            QCOMPARE(tak.passwordStorageText(), QStringLiteral("Password saved in %1. The readable copy that an earlier version kept in the settings file has been deleted.").arg(Credential::storeName()));
+        } else {
+            QVERIFY(tak.passwordStorageText().contains(QStringLiteral("this session only")));
+        }
+    }
+    // Once: the next start reads it from the store and does not move again.
+    {
+        TakManager tak;
+        QSettings s;
+        QVERIFY(!s.contains(QStringLiteral("TAK/password")));
+        if (Credential::inOsStore()) {
+            Credential::dropCache();
+            TakManager fresh;
+            QCOMPARE(fresh._password, QStringLiteral("unit-test-not-a-real-password"));
+            QCOMPARE(fresh.passwordStorageText(),
+                     QStringLiteral("Password saved in %1.").arg(Credential::storeName()));
+        }
+    }
+    Credential::erase(account);
+}
+
+void TakManagerTest::_passwordNeverInSettings()
+{
+    const QString account = TakManager::passwordAccount();
+    Credential::erase(account);
+    TakManager tak;
+    tak._password = QStringLiteral("unit-test-typed-password");
+    tak._persist();
+    {
+        QSettings s;
+        QVERIFY(!s.contains(QStringLiteral("TAK/password")));
+        // Not anywhere else in the settings file either.
+        for (const QString &k : s.allKeys()) {
+            QVERIFY2(!s.value(k).toString().contains(QStringLiteral("unit-test-typed-password")), qPrintable(k));
+        }
+    }
+    if (Credential::inOsStore()) {
+        QCOMPARE(Credential::load(account), QStringLiteral("unit-test-typed-password"));
+        QCOMPARE(tak.passwordStorageText(), QStringLiteral("Password saved in %1.").arg(Credential::storeName()));
+    } else {
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("this session only")));
+    }
+    // Clearing the field removes the stored copy.
+    tak._password.clear();
+    tak._persist();
+    QVERIFY(tak.passwordStorageText().isEmpty());
+    Credential::dropCache();
+    QVERIFY(Credential::load(account).isEmpty());
+}
+
+void TakManagerTest::_clientKeyOwnerOnly()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString key = dir.filePath(QStringLiteral("client_key.pem"));
+    const QByteArray pem = QByteArrayLiteral("-----BEGIN PRIVATE KEY-----\nunit-test\n-----END PRIVATE KEY-----\n");
+    QVERIFY(TakManager::_writePemFile(key, pem, true));
+    {
+        QFile f(key);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), pem);   // still readable by its owner
+    }
+#ifdef Q_OS_WIN
+    const std::wstring native = QDir::toNativeSeparators(key).toStdWString();
+    PACL dacl = nullptr;
+    PSECURITY_DESCRIPTOR sd = nullptr;
+    QCOMPARE(::GetNamedSecurityInfoW(native.c_str(), SE_FILE_OBJECT, DACL_SECURITY_INFORMATION,
+                                     nullptr, nullptr, &dacl, nullptr, &sd), DWORD(ERROR_SUCCESS));
+    SECURITY_DESCRIPTOR_CONTROL control = 0;
+    DWORD revision = 0;
+    QVERIFY(::GetSecurityDescriptorControl(sd, &control, &revision));
+    const bool isProtected = (control & SE_DACL_PROTECTED) != 0;
+    const int aces = dacl ? int(dacl->AceCount) : -1;
+    ::LocalFree(sd);
+    QVERIFY(isProtected);      // nothing inherited from the profile folder
+    QCOMPARE(aces, 1);         // the current user only
+#else
+    const QFileDevice::Permissions p = QFile::permissions(key);
+    QVERIFY(p & QFileDevice::ReadOwner);
+    QVERIFY(!(p & (QFileDevice::ReadGroup | QFileDevice::ReadOther
+                   | QFileDevice::WriteGroup | QFileDevice::WriteOther)));
+#endif
+    // A certificate is not secret and keeps the folder's permissions.
+    QVERIFY(TakManager::_writePemFile(dir.filePath(QStringLiteral("client_cert.pem")), pem, false));
+}
+
+void TakManagerTest::_statusAfterFailedConnect()
+{
+    // A port nothing listens on: take a free one and close it again.
+    quint16 port = 0;
+    {
+        QTcpServer probe;
+        QVERIFY(probe.listen(QHostAddress::LocalHost, 0));
+        port = probe.serverPort();
+    }
+    TakManager tak;
+    tak._host = QStringLiteral("127.0.0.1");
+    tak._port = port;
+    tak.connectServer();
+    QCOMPARE(tak.statusText(), QStringLiteral("connecting..."));
+    QTRY_VERIFY_WITH_TIMEOUT(tak.statusText().startsWith(QStringLiteral("connect failed: ")), 15000);
+    QVERIFY(!tak.connected());
+    // It stays that way; it does not fall back to "connecting...".
+    QTest::qWait(300);
+    QVERIFY(tak.statusText().startsWith(QStringLiteral("connect failed: ")));
+
+    // A link that was up and dropped still says "disconnected".
+    tak._onEncrypted();
+    tak._onDisconnected();
+    QCOMPARE(tak.statusText(), QStringLiteral("disconnected"));
+    tak.disconnectServer();
+}
+
+void TakManagerTest::_receiveBufferBounded()
+{
+    TakManager tak;
+    tak._gcsUid = QStringLiteral("rotorlab-g46test0001");
+    auto ev = [](const QString &uid) {
+        return QStringLiteral("<event version=\"2.0\" uid=\"%1\" type=\"a-f-G-U-C\" how=\"h-e\">"
+                              "<point lat=\"1\" lon=\"2\" hae=\"0\" ce=\"1\" le=\"1\"/></event>")
+            .arg(uid).toUtf8();
+    };
+
+    // An event that never ends: the buffer grows up to the bound, then the
+    // partial event is dropped with a log line.
+    QSignalSpy log(&tak, &TakManager::logMessage);
+    tak._consumeRx(QByteArrayLiteral("<event uid=\"endless\"><detail>"));
+    const QByteArray filler(64 * 1024, 'x');
+    qsizetype fed = 0;
+    while (fed <= TakManager::kMaxRxBufferBytes) {
+        tak._consumeRx(filler);
+        fed += filler.size();
+        QVERIFY(tak._rxBuf.size() <= TakManager::kMaxRxBufferBytes);
+    }
+    QVERIFY(tak._rxBuf.isEmpty());
+    QVERIFY(anyLine(log, QStringLiteral("TAK receive buffer over 1024 KB with no complete event")));
+    QVERIFY(!tak.cotReceivedSinceConnect());
+
+    // The stream carries on: the next complete event is read.
+    tak._consumeRx(ev(QStringLiteral("ANDROID-after")));
+    QVERIFY(tak.cotReceivedSinceConnect());
+
+    // S2: many complete events in one read are handled in passes from the
+    // event loop, not all at once, and none is lost or dropped.
+    TakManager tak3;
+    tak3._gcsUid = QStringLiteral("rotorlab-g46test0003");
+    QByteArray burst;
+    const int n = TakManager::kMaxRxEventsPerPass * 3 + 7;
+    for (int i = 0; i < n; ++i) {
+        burst += ev(QStringLiteral("ANDROID-burst-%1").arg(i));
+    }
+    QSignalSpy log3(&tak3, &TakManager::logMessage);
+    tak3._consumeRx(burst);
+    QVERIFY(!tak3._rxBuf.isEmpty());          // only one pass so far
+    QVERIFY(tak3._rxDrainScheduled);
+    QTRY_VERIFY_WITH_TIMEOUT(tak3._rxBuf.isEmpty(), 5000);
+    QVERIFY(!anyLine(log3, QStringLiteral("dropped")));
+
+    // Events below the bound split across reads still join up.
+    TakManager tak2;
+    tak2._gcsUid = QStringLiteral("rotorlab-g46test0002");
+    const QByteArray whole = ev(QStringLiteral("ANDROID-split"));
+    tak2._consumeRx(whole.left(20));
+    QVERIFY(!tak2.cotReceivedSinceConnect());
+    tak2._consumeRx(whole.mid(20));
+    QVERIFY(tak2.cotReceivedSinceConnect());
+    QVERIFY(tak2._rxBuf.isEmpty());
+}
+
+void TakManagerTest::_keyFileFailsClosed()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    const QString key = dir.filePath(QStringLiteral("client_key.pem"));
+    const QByteArray oldPem = QByteArrayLiteral("-----BEGIN PRIVATE KEY-----\nold\n-----END PRIVATE KEY-----\n");
+    const QByteArray newPem = QByteArrayLiteral("-----BEGIN PRIVATE KEY-----\nnew\n-----END PRIVATE KEY-----\n");
+    QVERIFY(TakManager::_writePemFile(key, oldPem, true));
+
+    // The file cannot be restricted: nothing is written, the old file stays.
+    TakManager::s_failRestrictForTest = true;
+    const bool wrote = TakManager::_writePemFile(key, newPem, true);
+    TakManager::s_failRestrictForTest = false;
+    QVERIFY(!wrote);
+    QVERIFY(!QFile::exists(key + QStringLiteral(".new")));
+    {
+        QFile f(key);
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), oldPem);
+    }
+
+    // A key file at load that cannot be restricted is not used.
+    const QString certDir = QStandardPaths::writableLocation(QStandardPaths::AppConfigLocation) + QStringLiteral("/tak");
+    QDir().mkpath(certDir);
+    {
+        QFile f(certDir + QStringLiteral("/client_key.pem"));
+        QVERIFY(f.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        f.write(oldPem);
+    }
+    TakManager::s_failRestrictForTest = true;
+    {
+        TakManager tak;
+        QVERIFY(tak._clientKeyPem.isEmpty());
+        QVERIFY(!tak.enrolled());
+    }
+    TakManager::s_failRestrictForTest = false;
+    {
+        TakManager tak;
+        QCOMPARE(tak._clientKeyPem, oldPem);
+    }
+    QFile::remove(certDir + QStringLiteral("/client_key.pem"));
+}
+
+void TakManagerTest::_plainPasswordKeptUntilStored()
+{
+    if (!Credential::inOsStore()) {
+        QSKIP("no system key store here: the plain value is removed at once by design");
+    }
+    const QString account = TakManager::passwordAccount();
+    Credential::erase(account);
+    {
+        QSettings s;
+        s.setValue(QStringLiteral("TAK/password"), QStringLiteral("unit-test-armed-password"));
+        s.sync();
+    }
+    // An aircraft is armed at start: the key store refuses the move.
+    Credential::setArmedProbe([]() { return true; });
+    {
+        TakManager tak;
+        QCOMPARE(tak._password, QStringLiteral("unit-test-armed-password"));
+        QVERIFY(tak.passwordStorageText().startsWith(
+            QStringLiteral("Password not moved to %1 yet.").arg(Credential::storeName())));
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("stays in the settings file")));
+        tak._persist();   // a settings save while still armed
+        QSettings s;
+        QCOMPARE(s.value(QStringLiteral("TAK/password")).toString(), QStringLiteral("unit-test-armed-password"));
+
+        // Disarmed: the next settings save moves it, no retyping.
+        Credential::setArmedProbe([]() { return false; });
+        tak._persist();
+        QSettings s2;
+        QVERIFY(!s2.contains(QStringLiteral("TAK/password")));
+        QCOMPARE(Credential::load(account), QStringLiteral("unit-test-armed-password"));
+        QCOMPARE(tak.passwordStorageText(), QStringLiteral("Password saved in %1. The readable copy that an earlier version kept in the settings file has been deleted.").arg(Credential::storeName()));
+    }
+    Credential::setArmedProbe(nullptr);
+    Credential::erase(account);
+}
+
+namespace {
+void seedPlainPassword(const QString &value)
+{
+    QSettings s;
+    s.setValue(QStringLiteral("TAK/password"), value);
+    s.sync();
+}
+bool plainPasswordInSettings()
+{
+    QSettings s;
+    return s.contains(QStringLiteral("TAK/password"));
+}
+} // namespace
+
+void TakManagerTest::_pendingPasswordCleared()
+{
+    if (!Credential::inOsStore()) {
+        QSKIP("no system key store here: the plain value is removed at once by design");
+    }
+    const QString account = TakManager::passwordAccount();
+    Credential::erase(account);
+    seedPlainPassword(QStringLiteral("unit-test-old-password"));
+    Credential::setArmedProbe([]() { return true; });
+    {
+        TakManager tak;
+        QVERIFY(tak._plainPasswordPending);
+        // The operator clears the field and settings are saved, still armed.
+        tak._password.clear();
+        tak._persist();
+        QVERIFY(!tak._plainPasswordPending);
+        QVERIFY(!plainPasswordInSettings());
+        QVERIFY(tak.passwordStorageText().isEmpty());
+    }
+    // Restart, disarmed: no password anywhere.
+    Credential::setArmedProbe([]() { return false; });
+    {
+        TakManager tak;
+        QVERIFY(tak._password.isEmpty());
+        QVERIFY(!plainPasswordInSettings());
+    }
+    Credential::dropCache();
+    QVERIFY(Credential::load(account).isEmpty());
+    Credential::setArmedProbe(nullptr);
+}
+
+void TakManagerTest::_pendingPasswordChanged()
+{
+    if (!Credential::inOsStore()) {
+        QSKIP("no system key store here: the plain value is removed at once by design");
+    }
+    const QString account = TakManager::passwordAccount();
+    Credential::erase(account);
+    seedPlainPassword(QStringLiteral("unit-test-old-password"));
+    Credential::setArmedProbe([]() { return true; });
+    {
+        TakManager tak;
+        QVERIFY(tak._plainPasswordPending);
+        // A new password typed while still armed: the store refuses it, and
+        // the old plain copy is removed, not kept.
+        tak._password = QStringLiteral("unit-test-new-password");
+        tak._persist();
+        QVERIFY(!tak._plainPasswordPending);
+        QVERIFY(!plainPasswordInSettings());
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("kept for this session only")));
+
+        // Disarmed: the next save stores the new one.
+        Credential::setArmedProbe([]() { return false; });
+        tak._persist();
+        QCOMPARE(Credential::load(account), QStringLiteral("unit-test-new-password"));
+        QVERIFY(!plainPasswordInSettings());
+    }
+    Credential::setArmedProbe(nullptr);
+    Credential::erase(account);
+}
+
+void TakManagerTest::_keyReplaceFailureCleansUp()
+{
+    QTemporaryDir dir;
+    QVERIFY(dir.isValid());
+    // The target cannot be replaced: a folder is in its place.
+    const QString key = dir.filePath(QStringLiteral("client_key.pem"));
+    QVERIFY(QDir().mkpath(key));
+    QString error;
+    QVERIFY(!TakManager::_writePemFile(key, QByteArrayLiteral("unit-test"), true, &error));
+    QVERIFY2(error.startsWith(QStringLiteral("could not replace the key file")), qPrintable(error));
+    QVERIFY(!QFile::exists(key + QStringLiteral(".new")));
+}
+
+void TakManagerTest::_disconnectClearsReceive()
+{
+    TakManager tak;
+    tak._gcsUid = QStringLiteral("rotorlab-r5test00001");
+    QByteArray burst;
+    for (int i = 0; i < TakManager::kMaxRxEventsPerPass * 2; ++i) {
+        burst += QStringLiteral("<event version=\"2.0\" uid=\"ANDROID-r5-%1\" type=\"a-f-G-U-C\" how=\"h-e\">"
+                                "<point lat=\"1\" lon=\"2\" hae=\"0\" ce=\"1\" le=\"1\"/></event>")
+                     .arg(i).toUtf8();
+    }
+    tak._consumeRx(burst);
+    QVERIFY(!tak._rxBuf.isEmpty());
+    tak.disconnectServer();
+    QVERIFY(tak._rxBuf.isEmpty());
+    // The drain already scheduled finds nothing and does not reschedule.
+    QTest::qWait(100);
+    QVERIFY(tak._rxBuf.isEmpty());
+    QVERIFY(!tak._rxDrainScheduled);
+}
+
+void TakManagerTest::_storeRefusalNamesItsCause()
+{
+    if (!Credential::inOsStore()) {
+        QSKIP("no system key store here");
+    }
+#ifdef Q_OS_WIN
+    const QString account = TakManager::passwordAccount();
+    Credential::erase(account);
+    // Over Windows Credential Manager's 2560-byte limit: refused with no
+    // aircraft armed. The note must not name the armed rule.
+    const QString tooLong(3000, QLatin1Char('x'));
+    Credential::setArmedProbe([]() { return false; });
+    seedPlainPassword(tooLong);
+    {
+        TakManager tak;
+        QVERIFY(tak._plainPasswordPending);
+        QVERIFY(!tak.passwordStorageText().contains(QStringLiteral("armed")));
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("did not accept it")));
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("stays in the settings file")));
+        QVERIFY(plainPasswordInSettings());
+
+        // Session-only note: a new over-long password typed this session.
+        tak._password = tooLong + QStringLiteral("y");
+        tak._persist();
+        QVERIFY(!tak.passwordStorageText().contains(QStringLiteral("armed")));
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("kept for this session only")));
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("did not accept it")));
+
+        // The same refusal while an aircraft is armed names the armed rule.
+        Credential::setArmedProbe([]() { return true; });
+        tak._password = QStringLiteral("unit-test-short");
+        tak._persist();
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("while an aircraft is armed")));
+    }
+    // Pending while armed names the armed rule.
+    seedPlainPassword(QStringLiteral("unit-test-old-password"));
+    {
+        TakManager tak;
+        QVERIFY(tak.passwordStorageText().contains(QStringLiteral("while an aircraft is armed")));
+    }
+    Credential::setArmedProbe(nullptr);
+    Credential::erase(account);
+#else
+    QSKIP("the size refusal is specific to Windows Credential Manager");
+#endif
 }

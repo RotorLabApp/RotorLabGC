@@ -11,6 +11,7 @@
 
 #include <QtCore/QObject>
 #include <QtCore/QTimer>
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QLoggingCategory>
 
 #include "MissionItem.h"
@@ -64,6 +65,7 @@ public:
         MissingRequestsError,   ///< Vehicle did not request all items during write sequence
         MaxRetryExceeded,       ///< Retry failed
         MissionTypeMismatch,    ///< MAV_MISSION_TYPE does not match _planType
+        VehicleBusyError,       ///< Vehicle kept rejecting MISSION_COUNT because of a transfer GC does not own
     } ErrorCode_t;
 
     // These values are public so the unit test can set appropriate signal wait times
@@ -72,6 +74,18 @@ public:
     // When actively retrying to request mission items, use a shorter timeout instead.
     static const int _retryTimeoutMilliseconds = 250;
     static const int _maxRetryCount = 5;
+    // During an upload the vehicle drives the transfer: PX4 resends its MISSION_REQUEST every 250 ms and gives up
+    // after 5 s without traffic from us. So after the first request, a quiet _ackTimeoutMilliseconds is not yet a
+    // failure: wait this many more ack timeouts (4.5 s in total, inside PX4's 5 s) before giving up.
+    static const int _maxWriteStallCount = 2;
+    // When the vehicle is busy with a transfer GC does not own (another ground station, or one GC cannot prove is its
+    // own) GC never cancels it. It waits longer than PX4's 5 s protocol timeout between MISSION_COUNTs, so a stale
+    // transfer can expire on the vehicle (each MISSION_COUNT refreshes that timeout), and gives up after this many.
+    static const int _busyBackoffMilliseconds = 6000;
+    static const int _maxBusyRetryCount = 2;
+    // How long after GC abandoned one of its own uploads it may still cancel that upload on the vehicle: the
+    // GeoFence/Rally uploads that follow a failed Mission upload start right away, well inside this window.
+    static const int _abandonedOwnershipMilliseconds = 7000;
 
 signals:
     void newMissionItemsAvailable   (bool removeAllRequested);
@@ -106,7 +120,7 @@ protected:
         TransactionRemoveAll
     } TransactionType_t;
 
-    void _startAckTimeout(AckType_t ack);
+    void _startAckTimeout(AckType_t ack, int intervalMilliseconds = -1);
     bool _checkForExpectedAck(AckType_t receivedAck);
     void _readTransactionComplete(void);
     void _handleMissionCount(const mavlink_message_t& message);
@@ -129,6 +143,13 @@ protected:
     void _connectToMavlink(void);
     void _disconnectFromMavlink(void);
     QString _planTypeString(void);
+    void _sendCancelAck(MAV_MISSION_TYPE missionType, uint8_t targetSystem, uint8_t targetComponent);
+    void _cancelOwnWrite(void);
+    void _markAbandonedWrite(void);
+    bool _ownsAbandonedWrite(void) const;
+    void _handleVehicleBusy(MAV_MISSION_TYPE busyType, bool ackAddressedToThisGcs);
+    PlanManager* _planManagerForType(MAV_MISSION_TYPE missionType) const;
+    static bool _addressedToThisGcs(uint8_t targetSystem, uint8_t targetComponent, bool allowBroadcast);
 
 protected:
     Vehicle*            _vehicle =              nullptr;
@@ -137,6 +158,13 @@ protected:
     QTimer*             _ackTimeoutTimer =      nullptr;
     AckType_t           _expectedAck;
     int                 _retryCount;
+    int                 _writeStallCount =      0;
+    int                 _busyRetryCount =       0;
+    bool                _sawVehicleBusy =       false;
+    uint8_t             _writeTargetSystem =    0;      ///< System id the last MISSION_COUNT was sent to
+    uint8_t             _writeTargetComponent = 0;      ///< Component id the last MISSION_COUNT was sent to
+    bool                _abandonedWrite =       false;  ///< This manager gave up on an upload the vehicle may still hold open
+    QElapsedTimer       _abandonedTimer;
 
     TransactionType_t   _transactionInProgress;
     bool                _resumeMission;

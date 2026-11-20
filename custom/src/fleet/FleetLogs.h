@@ -39,6 +39,8 @@
 #include <QtCore/QString>
 #include <QtCore/QVariantList>
 
+#include "net/LogCollectPolicy.h"
+
 class FleetClient;
 class QNetworkReply;
 class QTimer;
@@ -109,7 +111,9 @@ private:
         /// operator has already answered, and making them find the row and
         /// press a button again is asking twice.
         bool     parkedOnSize = false;
-        int      collectAttempts = 0;
+        /// Pulls off the aircraft: real failures, when to try next, and the
+        /// last reason. An armed refusal is not counted (LogCollectPolicy).
+        LogCollectPolicy::Attempts collectTries;
         /// Uploads attempted for this entry. A dropped connection mid-body is
         /// expected on a big file and is retried, but a refusal we have
         /// misread as retryable must not loop for ever in front of the crew.

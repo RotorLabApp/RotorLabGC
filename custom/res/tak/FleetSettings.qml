@@ -149,6 +149,14 @@ Rectangle {
                     title: (modelData.connected ? "●  " : "○  ") + qsTr("sysid ") + modelData.sysid +
                            (modelData.connected ? qsTr("  (connected)") : qsTr("  (offline)"))
                     LabeledField { label: qsTr("Callsign");     text: _cs; onTextChanged: _cs = text }
+                    // G47 (T15): a callsign markers cannot name this aircraft by.
+                    QGCLabel {
+                        Layout.fillWidth: true
+                        visible:    (modelData.nameNote || "") !== ""
+                        wrapMode:   Text.WordWrap
+                        textFormat: Text.PlainText
+                        text:       modelData.nameNote || ""
+                    }
                     LabeledField { label: qsTr("Video feed URL"); text: _vu; onTextChanged: _vu = text }
                     LabeledField { label: qsTr("Tail number");   text: _tl; onTextChanged: _tl = text }
 

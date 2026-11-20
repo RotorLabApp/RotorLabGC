@@ -41,6 +41,15 @@ public:
 
     void setDatabaseFile(const QString &path) { _databasePath = path; }
 
+    /// GC 5.2.0 (G79): Copernicus tiles cached by older versions can hold 0 m for a null height and their cache key changed
+    /// (see CopernicusElevationProvider::kTileCacheVersion). Safe to run any number of times.
+    /// - Old Copernicus tiles are deleted, with their set links, so the set counts are true.
+    /// - For each deleted tile of an offline set, a pending download row under the new key is added, so the set shows as
+    ///   incomplete and resumes by downloading fresh tiles.
+    /// - Pending download rows under the old key are moved to the new key.
+    /// @return number of old Copernicus tiles and pending rows that were migrated
+    static int migrateCopernicusTileKeys(QSqlDatabase &db);
+
 public slots:
     bool enqueueTask(QGCMapTask *task);
     void stop();

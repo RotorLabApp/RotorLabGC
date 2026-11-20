@@ -26,10 +26,10 @@ Rectangle {
     anchors.fill:   parent
 
     property string _log:       ""
-    property string _testCmd:   "GOTO 1"
+    property string _testCmd:   "GOTO " + TAKManager.callsignPrefix + "-1"
     property string _testResult: ""
     property string _trustPath: ""
-    property string _trustPass: "atakatak"
+    property string _trustPass: ""   // empty = TAK default "atakatak" (TakManager)
     property string _clientPath: ""
     property string _clientPass: ""
     property real   _pad:       ScreenTools.defaultFontPixelWidth
@@ -92,6 +92,7 @@ Rectangle {
         property alias label: _l.text
         property alias text: _tf.text
         property alias echoMode: _tf.echoMode
+        property alias placeholderText: _tf.placeholderText
         signal committed(string value)
         Layout.fillWidth:   true
         columns:            _narrow ? 1 : 3
@@ -190,20 +191,68 @@ Rectangle {
                     onCommitted: TAKManager.username = value }
                 Field { label: qsTr("Password"); echoMode: TextInput.Password; text: TAKManager.password
                     onCommitted: TAKManager.password = value }
+                // Where the password is kept (G41): the platform key store,
+                // or this session only. Never the settings file.
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:   TAKManager.passwordStorageText !== ""
+                    wrapMode:  Text.WordWrap
+                    text:      TAKManager.passwordStorageText
+                }
                 Field { label: qsTr("Callsign prefix"); text: TAKManager.callsignPrefix
                     onCommitted: TAKManager.callsignPrefix = value }
+                // G47: a prefix that cannot name this station is not saved
+                // (T12); a change turns "Commands to aircraft on" off (T14).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.prefixEntryError !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    font.bold:  true
+                    color:      _warnColor
+                    text:       TAKManager.prefixEntryError
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.prefixChangedNotice !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    text:       TAKManager.prefixChangedNotice
+                }
                 Field { label: qsTr("GCS UID"); text: TAKManager.gcsUid
                     onCommitted: TAKManager.gcsUid = value }
                 QGCCheckBox { text: qsTr("Verify server certificate"); checked: TAKManager.verifyPeer
                     onClicked: TAKManager.verifyPeer = checked }
-                QGCLabel {
+                // G40: the stronger warning. Verify stays the operator's
+                // setting (default on); turning it off is also logged.
+                Rectangle {
                     Layout.fillWidth: true
-                    visible:   !TAKManager.verifyPeer
-                    wrapMode:  Text.WordWrap
-                    color:     _warnColor
-                    text:      qsTr("Verify server certificate is off: the CoT stream accepts any server " +
-                                    "certificate. Enrollment sends the TAK username and password only after " +
-                                    "you accept the server's certificate fingerprint below.")
+                    visible:        !TAKManager.verifyPeer
+                    color:          "transparent"
+                    border.color:   _warnColor
+                    border.width:   2
+                    radius:         4
+                    implicitHeight: _verifyOffText.implicitHeight + _pad * 2
+                    QGCLabel {
+                        id:        _verifyOffText
+                        x:         _pad
+                        y:         _pad
+                        width:     parent.width - _pad * 2
+                        wrapMode:  Text.WordWrap
+                        color:     _warnColor
+                        textFormat: Text.StyledText
+                        text:      "<b>" + qsTr("Verify server certificate is off.") + "</b> " +
+                                   qsTr("The CoT stream accepts any server certificate, so any device on the " +
+                                        "network path can pose as the TAK server. It can see the positions " +
+                                        "this station sends, and it can send markers and commands to this " +
+                                        "station as if it were the TAK server. With \"Commands to aircraft " +
+                                        "on\", this station handles those commands like commands from the " +
+                                        "real server and can send them to the aircraft. This setting is on by " +
+                                        "default; turning it off is meant for testing on a network you " +
+                                        "control.") + "<br><br>" +
+                                   qsTr("Enrollment still sends the TAK username and password only after you " +
+                                        "accept the server's certificate fingerprint below.")
+                    }
                 }
                 QGCLabel {
                     Layout.fillWidth: true
@@ -314,6 +363,7 @@ Rectangle {
                 Field { label: qsTr("Truststore file"); text: _trustPath
                     onCommitted: _trustPath = value }
                 Field { label: qsTr("Truststore password"); echoMode: TextInput.Password; text: _trustPass
+                    placeholderText: qsTr("Default: atakatak")
                     onCommitted: _trustPass = value }
                 RowLayout {
                     Layout.fillWidth: true
@@ -339,10 +389,22 @@ Rectangle {
 
             Card {
                 title: qsTr("GCS location")
+                QGCCheckBox {
+                    text: qsTr("Share this station's position with the TAK server")
+                    checked: TAKManager.shareStationPosition
+                    onClicked: TAKManager.shareStationPosition = checked
+                }
                 QGCLabel {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    text: qsTr("Position broadcast for the GCS beacon. Automatic uses QGC's ground-station " +
+                    text: qsTr("When on, the TAK server and everyone in this station's TAK groups can see " +
+                               "where this computer is. When off, the GCS beacon still announces this " +
+                               "station, with no location.")
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Position the GCS beacon sends when sharing is on. Automatic uses QGC's ground-station " +
                                "location: your system location, or an NMEA GPS device such as a USB GPS " +
                                "dongle configured in General settings. Manual broadcasts the fixed " +
                                "coordinates below (useful for a fixed ground station with no GPS).")
@@ -408,6 +470,70 @@ Rectangle {
                 }
                 QGCCheckBox { text: qsTr("Read commands from ATAK markers"); checked: TAKManager.commandEnabled
                     onClicked: TAKManager.commandEnabled = checked }
+                // Command markers being dropped (5.1.2 review R1, R3).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.commandDropNotice !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    font.bold:  true
+                    color:      _warnColor
+                    text:       TAKManager.commandDropNotice
+                }
+                // An empty callsign prefix stops command reading (G50).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:   TAKManager.commandPrefixEmpty
+                    wrapMode:  Text.WordWrap
+                    font.bold: true
+                    color:     _warnColor
+                    text:      TAKManager.emptyPrefixNotice
+                }
+                // G47: a saved prefix that cannot name this station (T13), and
+                // another station on the link using this prefix (T8).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.prefixProblemNotice !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    font.bold:  true
+                    color:      _warnColor
+                    text:       TAKManager.prefixProblemNotice
+                }
+                // Security M1: commands are not read until the prefix is set or
+                // confirmed on this install (T19).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.prefixNotSetNotice !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    font.bold:  true
+                    color:      _warnColor
+                    text:       TAKManager.prefixNotSetNotice
+                }
+                QGCButton {
+                    visible:   TAKManager.prefixNotSetNotice !== ""
+                    text:      qsTr("Use %1 for this station").arg(TAKManager.callsignPrefix)
+                    onClicked: TAKManager.confirmCallsignPrefix()
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.prefixConflictNotice !== ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    font.bold:  true
+                    color:      _warnColor
+                    text:       TAKManager.prefixConflictNotice
+                }
+                // How a marker names this station's aircraft (G47, G48: T17).
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible:    TAKManager.commandEnabled && !TAKManager.commandPrefixEmpty
+                                && TAKManager.prefixProblemNotice === ""
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    text:       TAKManager.addressingHelp
+                }
                 QGCLabel {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
@@ -417,15 +543,24 @@ Rectangle {
                 QGCLabel {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
-                    visible:  TAKManager.commandEnabled
+                    visible:  TAKManager.commandEnabled && !TAKManager.commandPrefixEmpty
+                              && TAKManager.prefixProblemNotice === ""
                     text:     qsTr("While Read commands from ATAK markers is on, this station appears in TAK " +
                                    "contact lists as %1. Its location is shared only while Publish drones as " +
-                                   "CoT markers and Publish GCS beacon are on.").arg(TAKManager.callsignPrefix + "-GCS")
+                                   "CoT markers, Publish GCS beacon and Share this station's position " +
+                                   "are on.").arg(TAKManager.callsignPrefix + "-GCS")
                 }
                 QGCCheckBox { text: qsTr("Command By ATAK on"); checked: TAKManager.c2Allowed
                     onClicked: TAKManager.c2Allowed = checked }
                 QGCCheckBox { text: qsTr("Commands to aircraft on"); checked: TAKManager.c2Armed
                     onClicked: TAKManager.c2Armed = checked }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("When this is on, commands read from ATAK markers that pass this station's " +
+                               "checks (enabled verbs, ATAK command senders, and the other settings on this " +
+                               "page) are sent to the aircraft. When it is off, none are sent.")
+                }
                 QGCLabel {
                     Layout.fillWidth: true
                     visible:   TAKManager.openSenderWarning !== ""
@@ -456,8 +591,9 @@ Rectangle {
                     Layout.fillWidth: true
                     wrapMode: Text.WordWrap
                     text: qsTr("Commands received from ATAK since RotorLab GC started, newest first: verb, " +
-                               "reported sender callsign and UID, target aircraft, time and result. Commands go " +
-                               "to the aircraft when received; this list does not hold or cancel them. ARM, TKOFF " +
+                               "reported sender callsign and UID, target aircraft, time and result. Commands that " +
+                               "pass this station's checks are sent to the aircraft when received; this list " +
+                               "does not hold or cancel them. ARM, TKOFF " +
                                "and GOTO also show a banner over the fly view until dismissed. Sent means " +
                                "transmitted to the aircraft. The aircraft's response is not shown here.")
                 }
@@ -476,31 +612,7 @@ Rectangle {
                         onClicked: TAKManager.clearRemoteCommands()
                     }
                 }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    wrapMode: Text.WordWrap
-                    text: qsTr("Clears this screen only. All received commands stay in the command log.")
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    wrapMode:   Text.WordWrap
-                    text:       qsTr("Command log (the app only adds to this file; it is a station record, " +
-                                     "not a certified or tamper-proof one):")
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    wrapMode:    Text.WrapAnywhere
-                    textFormat:  Text.PlainText
-                    font.family: ScreenTools.fixedFontFamily
-                    text:        TAKManager.commandLogPath
-                }
-                QGCLabel {
-                    Layout.fillWidth: true
-                    visible: TAKManager.commandLogError
-                    wrapMode: Text.WordWrap
-                    color:   _warnColor
-                    text:    qsTr("Command log could not be written")
-                }
+                // The entries sit under the "N received" line; the log path follows the list (G54).
                 Repeater {
                     model: TAKManager.remoteCommands
                     delegate: ColumnLayout {
@@ -510,10 +622,9 @@ Rectangle {
                             Layout.fillWidth: true
                             wrapMode:    Text.WordWrap
                             textFormat:  Text.PlainText
-                            font.bold:   modelData.banner
                             text:        modelData.date + " " + modelData.time + "  " + modelData.summary
                         }
-                        // Bold marks a command whose banner is still showing on the fly view.
+                        // Marks a command whose banner is still showing on the fly view.
                         QGCLabel {
                             visible:        modelData.banner
                             font.pointSize: ScreenTools.defaultFontPointSize
@@ -529,6 +640,31 @@ Rectangle {
                             text:        modelData.warning
                         }
                     }
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode: Text.WordWrap
+                    text: qsTr("Clears this screen only. All received commands stay in the command log.")
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode:   Text.WordWrap
+                    text:       qsTr("Command log (the app only adds to this file. It is a station record " +
+                                     "only; the file can be changed outside the app):")
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode:    Text.WrapAnywhere
+                    textFormat:  Text.PlainText
+                    font.family: ScreenTools.fixedFontFamily
+                    text:        TAKManager.commandLogPath
+                }
+                QGCLabel {
+                    Layout.fillWidth: true
+                    visible: TAKManager.commandLogError
+                    wrapMode: Text.WordWrap
+                    color:   _warnColor
+                    text:    qsTr("Command log could not be written")
                 }
             }
 
@@ -657,7 +793,7 @@ Rectangle {
                     onClicked: TAKManager.verbArm = checked }
                 QGCCheckBox { text: qsTr("DISARM"); checked: TAKManager.verbDisarm
                     onClicked: TAKManager.verbDisarm = checked }
-                QGCCheckBox { text: qsTr("TKOFF  (arm + take off)"); checked: TAKManager.verbTakeoff
+                QGCCheckBox { text: qsTr("TKOFF  (take off; arms the aircraft only when ARM is on)"); checked: TAKManager.verbTakeoff
                     onClicked: TAKManager.verbTakeoff = checked }
             }
 
@@ -698,7 +834,7 @@ Rectangle {
                         wrapMode:   Text.WordWrap
                         textFormat: Text.PlainText
                         text:       _testResult
-                        color:      /not sent|refused/i.test(_testResult) ? _warnColor : qgcPal.text
+                        color:      _testResult !== "" && !TAKManager.lastTestSent ? _warnColor : qgcPal.text
                     }
                 }
             }

@@ -16,6 +16,9 @@ CPMAddPackage(
     GITHUB_REPOSITORY mavlink/libevents
     GIT_TAG 077677a7d2f48f0af0eb8a4e4a7b6310956728bc # pinned: last before 32-bit sysid (needs newer MAVLink)
     SOURCE_SUBDIR libs/cpp
+    # RotorLab: G108. Built and linked into GC only: EXCLUDE_FROM_ALL keeps its
+    # install rules (static libraries, headers, CMake config) out of the release files.
+    EXCLUDE_FROM_ALL YES
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE libevents)

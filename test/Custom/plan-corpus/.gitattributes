@@ -1,0 +1,2 @@
+# G64: the plan corpus (G61) exactly as GC 5.1.1 wrote it (CRLF); compared as bytes.
+*.plan -text

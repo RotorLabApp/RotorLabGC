@@ -29,4 +29,7 @@ private slots:
 private:
     /// Activated and past the launch check, as during a flight.
     static void _openSession(LicenseManager &lm);
+    /// A good reply carrying a record signed by a key generated for this test
+    /// and pinned in `lm` (G89: a good answer counts only with one).
+    static QByteArray _goodReply(LicenseManager &lm, const QString &state);
 };

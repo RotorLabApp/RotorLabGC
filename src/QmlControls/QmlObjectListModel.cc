@@ -198,6 +198,14 @@ void QmlObjectListModel::insert(int i, QObject* object)
 
 void QmlObjectListModel::insert(int i, QList<QObject*> objects)
 {
+    // RotorLab GC 5.1.2 (G71): an empty list is a no-op. insertRows(i, 0) would call
+    // beginInsertRows(i, i - 1), which asserts in Qt Debug builds (last >= first) and hands views an
+    // invalid range in Release (QGCMapPolygon::offset() appends an empty list for a polygon with
+    // fewer than 3 vertices, e.g. while a structure scan loads).
+    if (objects.isEmpty()) {
+        return;
+    }
+
     if (i < 0 || i > _objectList.count()) {
         qCWarning(QmlObjectListModelLog) << "Invalid index - index:count" << i << _objectList.count() << this;
     }

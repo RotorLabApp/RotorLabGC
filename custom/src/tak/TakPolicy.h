@@ -14,11 +14,17 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QHash>
 #include <QtCore/QJsonObject>
+#include <QtCore/QList>
+#include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
 #include "TakCommand.h"
+
+class QDateTime;
+namespace CoT { struct Marker; }
 
 namespace TakPolicy {
 
@@ -36,8 +42,10 @@ bool isProminentVerb(Tak::Verb v);
 /// "UID ANDROID-123" or "(sender not reported)". Not verified by the station.
 QString senderText(const QString &callsign, const QString &uid);
 
-/// The aircraft a command names before it is resolved: "aircraft 2, 3",
-/// "all aircraft" or "selected aircraft".
+/// The aircraft a command names before it is resolved (T16): "aircraft
+/// ROTOR-2, ROTOR-3", "all aircraft of ROTOR", "HAWK", "SEL (not accepted)",
+/// or for a marker that names no station "aircraft 2, 3 (no station named)"
+/// and "all aircraft (no station named)".
 QString intendedTargetText(const Tak::Command &cmd);
 
 /// Where a GOTO sends the aircraft, in the units of the command:
@@ -60,6 +68,22 @@ QString dispatchResultText(const QList<int> &sysids, const QStringList &results,
 
 /// "Not sent: <why>", for a command a station setting kept from the aircraft.
 QString notSentResult(const QString &why);
+
+/// A GOTO point the station may send: finite, in range, and not exactly
+/// 0, 0 (what a CoT event carries for an unknown position) (G39).
+bool pointKnown(double lat, double lon);
+
+/// Why a GOTO is refused before dispatch (G39).
+QString gotoMultipleRefusal();      ///< the command names more than one aircraft
+QString gotoUnknownPointRefusal();  ///< the point is unknown (pointKnown false)
+/// Why TKOFF is not sent to an aircraft that is not armed while the ARM verb
+/// is off (G49). TKOFF arms the aircraft first, so it is held to the ARM
+/// switch.
+QString takeoffNeedsArmRefusal();
+
+/// What the list shows as the destination of a GOTO with an unknown point:
+/// "unknown point at 400 ft above launch" or "unknown point at current altitude".
+QString unknownPointText(int altFt);
 
 /// What the station shows about one received command.
 struct RemoteCommand {
@@ -156,5 +180,175 @@ QString altitudeWarning(int commandedFt, double warnAboveFt);
 /// The altitude warning a received-command row carries: altitudeWarning()
 /// when the command was sent to an aircraft, empty when nothing was sent.
 QString sentAltitudeWarning(bool sent, int commandedFt, double warnAboveFt);
+
+/// Why an inbound CoT event may not carry a command, or an empty string
+/// when it is a marker a person placed (G38). Commands are read only from a
+/// marker that is not a device's own report (no <takv> or <__group>), was
+/// placed by a person (how h-*), names the device that created it (a p-p
+/// link to a uid other than its own) and is not stale at `nowUtc`. The
+/// event type is not checked: ATAK's point dropper places a-* markers.
+///
+/// Also refused: a time more than 5 minutes ahead of `nowUtc`, a time more
+/// than 24 hours before it, and a time before `notBeforeUtc` (when valid:
+/// the start of this station's session, so a marker from before a restart
+/// is not run again, 5.1.2 review S3).
+/// A marker whose time is at or before `repeatFloorUtc` (when valid) is
+/// refused too: it may have been dropped from the repeat list (E1).
+QString markerNotCommandReason(const CoT::Marker &m, const QDateTime &nowUtc,
+                               const QDateTime &notBeforeUtc = QDateTime(),
+                               const QDateTime &repeatFloorUtc = QDateTime());
+
+/// Why a marker dropped earlier this session is not run when delivered again (L1).
+QString droppedEarlierReason();
+
+/// The line for command markers not read because more than `perSecond` in
+/// one second or `perMinute` in one minute arrived (5.1.2 review S1).
+QString rateLimitLine(int dropped, int perSecond, int perMinute);
+
+/// The line for "marker ignored" lines not shown because more than
+/// `perSecond` arrived in one second (5.1.2 review R6).
+QString ignoredLinesDroppedLine(int dropped, int perSecond);
+
+/// True for the markerNotCommandReason() reasons that come from the marker
+/// time (ahead of this station's clock, more than 24 hours old, placed
+/// before this station started).
+bool isMarkerTimeReason(const QString &reason);
+
+/// Why a command marker is not run when this station holds too many markers
+/// to check for repeats.
+QString repeatListFullReason();
+
+/// The TAK page notice while command markers are dropped, or an empty
+/// string. Counts add up while drops continue and reset after a minute with
+/// none (5.1.2 review R1, R3).
+QString commandDropNotice(int rateDropped, int fullDropped, int timeDropped, int perSecond, int perMinute);
+
+/// The fly-view line for the same drops (total of the three counts), or an
+/// empty string when there are none (5.1.2 review L2).
+QString flyDropNotice(int total);
+
+/// Why a command marker is not read while the callsign prefix is empty (G50).
+QString emptyPrefixReason();
+
+/// The TAK page notice while the callsign prefix is empty (G50).
+QString emptyPrefixNotice();
+
+/// The station's line for a marker it did not run (G36), e.g.
+/// "marker ignored: stale (\"LAUNCH 1\", UID ANDROID-1)".
+QString markerIgnoredLine(const QString &reason, const QString &name, const QString &uid);
+
+// ---------------------------------------------------------------------------
+// Addressing (G47) and SEL (G48)
+//
+// A marker names the aircraft as this station publishes it to TAK: the
+// callsign prefix and the system id (ROTOR-2, ROTOR-1,3, ROTOR-ALL), or the
+// aircraft's Fleet callsign. This is a routing rule, so that a command meant
+// for one station does not act at another. It is not authentication: the
+// marker text is written by the sending device, like the reported sender.
+// ---------------------------------------------------------------------------
+
+/// Seconds a station, an aircraft name or a prefix conflict seen on the link
+/// is remembered after it was last seen.
+inline constexpr int kAddressSeenSecs = 120;
+
+/// Why `prefix` cannot name this station, or an empty string when it can:
+/// 2 to 12 letters and digits, starting with a letter, not a command word
+/// (Tak::isReservedWord), and not ROTOR, the old shared default (G47).
+QString prefixProblem(const QString &prefix);
+
+/// True for ROTOR in any case: the prefix every station had by default in
+/// earlier versions. An upgraded install saved with it is offered its own
+/// default (defaultPrefixFor) instead, and it cannot be entered.
+bool isSharedDefaultPrefix(const QString &prefix);
+/// Why ROTOR cannot be a prefix (prefixProblem, logged on the T12 path).
+QString sharedDefaultPrefixReason();
+
+/// True when markers may name an aircraft by this Fleet callsign: letters,
+/// digits, spaces and hyphens only; a letter in every word but the last; no
+/// ALT, SPD, ALL, SEL or GCS word; at most Tak::kMaxNameWords words and
+/// Tak::kMaxNameChars characters; and not read as <prefix>-<number>.
+bool fleetCallsignNameable(const QString &callsign, const QString &prefix);
+
+/// The station prefix in a station callsign "<prefix>-GCS" (normalized, upper
+/// case), or an empty string when `callsign` is not one.
+QString stationPrefixOf(const QString &callsign);
+
+enum class Address {
+    Own,            ///< for this station: `ids` / `all` say which aircraft
+    OtherStation,   ///< a name another station seen on the link publishes
+    Unaddressed,    ///< no station named (GOTO 2, RTL ALL)
+    NoAircraft,     ///< this station named, but no aircraft (GOTO ROTOR)
+    UnknownStation, ///< a name no station seen on the link publishes
+    Sel,            ///< SEL, never run (G48)
+    Mismatch,       ///< marker text and its send-to name different aircraft
+    FleetConflict,  ///< a Fleet callsign another station also uses
+};
+
+struct AddressInput {
+    QString             ownPrefix;
+    QHash<QString, int> fleetNames;       ///< nameable Fleet callsign (normalized) -> sysid
+    QSet<QString>       fleetConflicts;   ///< those seen on another station's aircraft
+    QSet<QString>       otherStations;    ///< prefixes of other stations seen (normalized)
+    QHash<QString, QString> otherAircraft; ///< another station's aircraft name -> its station prefix
+};
+
+struct AddressResult {
+    Address     kind = Address::Unaddressed;
+    bool        all = false;    ///< Own: every aircraft of this station
+    QList<int>  ids;            ///< Own: the system ids named
+    QString     name;           ///< the name as compared, e.g. "ROTOR-2" or "HAWK"
+    QString     station;        ///< OtherStation: that station's prefix
+};
+
+/// Which station a parsed command is for.
+AddressResult classifyAddress(const Tak::Command &cmd, const AddressInput &in);
+
+/// The reason a command with this address is not run here (without
+/// "Not sent: "), or an empty string for Own. T1 to T5, T10, T11, T18.
+QString addressRefusal(const AddressResult &a, const Tak::Command &cmd, const QString &ownPrefix);
+
+/// T5: the reason fragment for a name another station publishes.
+QString otherStationReason(const QString &name, const QString &station, const QString &ownPrefix);
+/// T6: an edit or repeat of a marker that named another station.
+QString otherStationEarlierReason();
+/// T7: why a command is not run while another station uses this prefix.
+QString prefixConflictRefusal(const QString &prefix);
+/// T8: the TAK page notice while another station uses this prefix.
+QString prefixConflictNotice(const QString &prefix, const QString &lastSeenUtc);
+/// T9: the fly-view line for the same.
+QString prefixConflictFlyLine(const QString &prefix);
+/// T12: the TAK page line when an entered prefix is not saved.
+QString prefixEntryRefusal();
+/// T12c: the TAK page line when ROTOR is entered.
+QString sharedDefaultPrefixRefusal();
+/// T13: the TAK page notice and the marker reason for a saved prefix that
+/// cannot name this station.
+QString prefixInvalidNotice(const QString &prefix);
+QString prefixInvalidReason();
+/// T14: logged and shown when the prefix changes.
+QString prefixChangedLine(const QString &from, const QString &to);
+/// T15: the Fleet row note for a callsign markers cannot name.
+QString fleetNotNameableNote(const QString &callsign, const QString &prefix, int sysid);
+/// T17: the TAK page help line for addressing.
+QString addressingHelp(const QString &prefix);
+
+/// The default prefix of a new install (security M1): "RL" and 4 characters
+/// of the random station uid, so no two installs share one by default.
+QString defaultPrefixFor(const QString &stationUid);
+/// T12b: an entered prefix another station used on the link in the last
+/// kAddressSeenSecs (security M4).
+QString prefixSeenRefusal(const QString &prefix);
+/// T19: the TAK page notice and the marker reason while the prefix has not
+/// been set or confirmed on this install (security M1).
+QString prefixNotSetNotice(const QString &prefix);
+QString prefixNotSetReason();
+/// T19c: logged when "Commands to aircraft on" is asked for before then.
+QString prefixNotSetArmLine();
+/// T14b: a marker placed before the prefix last changed.
+QString prefixFloorReason();
+/// T20: a command for this station whose aircraft is not connected. One
+/// aircraft: "no aircraft ROTOR-3 is connected to this station"; several or
+/// ALL: "none of the named aircraft is connected to this station".
+QString noAircraftConnected(const QString &name, bool several);
 
 } // namespace TakPolicy

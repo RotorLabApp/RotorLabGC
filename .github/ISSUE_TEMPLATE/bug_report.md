@@ -13,10 +13,10 @@ Please leave out keys, passwords, flight logs and anything personal.
 -->
 
 **GC version**
-For example 5.1.1.
+For example 5.4.0.
 
 **Platform**
-Windows 10 or 11, or Android (device and Android version).
+Windows 10 or 11, Android (device and Android version), or Linux (distribution and version).
 
 **Autopilot and aircraft**
 For example ArduPilot Copter 4.5, PX4 1.15, or SITL.

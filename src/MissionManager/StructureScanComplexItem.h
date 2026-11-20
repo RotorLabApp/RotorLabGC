@@ -37,6 +37,9 @@ public:
     Q_PROPERTY(Fact*            scanBottomAlt               READ scanBottomAlt                                              CONSTANT)
     Q_PROPERTY(Fact*            layers                      READ layers                                                     CONSTANT)
     Q_PROPERTY(Fact*            gimbalPitch                 READ gimbalPitch                                                CONSTANT)
+    /// G67: false on ArduPilot, which gets ROI_LOCATION (195) at the structure center and never the gimbal pitch
+    Q_PROPERTY(bool             gimbalPitchUsed             READ gimbalPitchUsed                                            NOTIFY gimbalPitchUsedChanged)
+    Q_PROPERTY(QString          gimbalPitchNote             READ gimbalPitchNote                                            CONSTANT)
     Q_PROPERTY(Fact*            startFromTop                READ startFromTop                                               CONSTANT)
     Q_PROPERTY(double           bottomFlightAlt             READ bottomFlightAlt                                            NOTIFY bottomFlightAltChanged)
     Q_PROPERTY(double           topFlightAlt                READ topFlightAlt                                               NOTIFY topFlightAltChanged)
@@ -52,6 +55,8 @@ public:
     Fact* layers            (void) { return &_layersFact; }
     Fact* gimbalPitch       (void) { return &_gimbalPitchFact; }
     Fact* startFromTop      (void) { return &_startFromTopFact; }
+    bool    gimbalPitchUsed (void) const;
+    QString gimbalPitchNote (void) const;
 
     double          bottomFlightAlt         (void) const;
     double          topFlightAlt            (void) const;
@@ -115,6 +120,7 @@ signals:
     void cameraShotsChanged             (int cameraShots);
     void timeBetweenShotsChanged        (void);
     void bottomFlightAltChanged         (void);
+    void gimbalPitchUsedChanged         (void);
     void topFlightAltChanged            (void);
     void _updateFlightPathSegmentsSignal(void);
 
@@ -134,6 +140,10 @@ private slots:
     void _recalcScanDistance                        (void);
     void _updateWizardMode                          (void);
     void _updateFlightPathSegmentsDontCallDirectly  (void);
+
+public:
+    /// RotorLab GC 5.3.0 (G96, PLAN-CONTRACT IB-6 bound 3): most layers a structure scan may have at file load.
+    static constexpr int maxLayers = 100;
 
 private:
     void    _setCameraShots                 (int cameraShots);

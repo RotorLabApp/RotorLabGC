@@ -61,6 +61,10 @@ target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_
 
 qt_add_library(QGroundControlControlsModule STATIC)
 
+# RotorLab GC 5.1.2 (G78): a script imported by TerrainStatus.qml only. Kept out of the qmldir: listed there,
+# it made "QGroundControl.Controls" ambiguous for other QML files.
+set_source_files_properties(TerrainProfileLabels.js PROPERTIES QT_QML_SKIP_QMLDIR_ENTRY TRUE)
+
 qt_add_qml_module(QGroundControlControlsModule
     URI QGroundControl.Controls
     VERSION 1.0
@@ -201,6 +205,7 @@ qt_add_qml_module(QGroundControlControlsModule
         SurveyMapVisual.qml
         TakeoffItemMapVisual.qml
         TerrainStatus.qml
+        TerrainProfileLabels.js
         TransectStyleComplexItemEditor.qml
         TransectStyleComplexItemStats.qml
         TransectStyleComplexItemTabBar.qml

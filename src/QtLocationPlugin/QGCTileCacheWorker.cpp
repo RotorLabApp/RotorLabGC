@@ -11,6 +11,7 @@
 #include "QGCCachedTileSet.h"
 #include "QGCMapTasks.h"
 #include "QGCMapUrlEngine.h"
+#include "ElevationMapProvider.h"
 #include "QGCLoggingCategory.h"
 
 #include <QtCore/QDateTime>
@@ -79,6 +80,7 @@ void QGCCacheWorker::run()
     if (_valid) {
         if (_connectDB()) {
             _deleteBingNoTileTiles();
+            (void) migrateCopernicusTileKeys(*_db);
         }
     }
 
@@ -207,6 +209,93 @@ void QGCCacheWorker::_deleteBingNoTileTiles()
             qCWarning(QGCTileCacheWorkerLog) << "Delete failed";
         }
     }
+}
+
+int QGCCacheWorker::migrateCopernicusTileKeys(QSqlDatabase &db)
+{
+    const QString type = QString::fromLatin1(CopernicusElevationProvider::kProviderKey);
+    const QString oldPrefix = QString::asprintf("%010d", UrlFactory::legacyHashFromProviderType(type));
+    const QString newPrefix = QString::asprintf("%010d", UrlFactory::hashFromProviderType(type));
+    if (oldPrefix == newPrefix) {
+        return 0;
+    }
+
+    // Keys are digits only, so ':' sorts after every key with this prefix
+    const QString from = oldPrefix;
+    const QString to = oldPrefix + QLatin1Char(':');
+    const int qtMapId = UrlFactory::getQtMapIdFromProviderType(type);
+
+    QSqlQuery query(db);
+    (void) query.exec(QStringLiteral("SELECT setID FROM TileSets WHERE defaultSet = 1"));
+    const quint64 defaultSet = query.next() ? query.value(0).toULongLong() : 0;
+
+    int migrated = 0;
+    if (!db.transaction()) {
+        qCWarning(QGCTileCacheWorkerLog) << "Copernicus key migration: could not start transaction" << db.lastError().text();
+        return 0;
+    }
+
+    // Pending downloads under the old key move to the new key. A row that already exists under the new key wins.
+    (void) query.prepare("UPDATE OR IGNORE TilesDownload SET hash = ? || substr(hash, 11), state = CASE WHEN state = 1 THEN 0 ELSE state END WHERE hash >= ? AND hash < ?");
+    query.addBindValue(newPrefix);
+    query.addBindValue(from);
+    query.addBindValue(to);
+    if (query.exec()) {
+        migrated += query.numRowsAffected();
+    }
+    (void) query.prepare("DELETE FROM TilesDownload WHERE hash >= ? AND hash < ?");
+    query.addBindValue(from);
+    query.addBindValue(to);
+    (void) query.exec();
+
+    // Old tiles: queue a fresh download for each one that belongs to an offline set, then delete the old tile and its links
+    struct OldTile { quint64 setID; QString hash; };
+    QList<OldTile> oldTiles;
+    (void) query.prepare("SELECT B.setID, A.hash FROM Tiles A LEFT JOIN SetTiles B ON A.tileID = B.tileID WHERE A.hash >= ? AND A.hash < ?");
+    query.addBindValue(from);
+    query.addBindValue(to);
+    if (query.exec()) {
+        while (query.next()) {
+            oldTiles.append({ query.value(0).toULongLong(), query.value(1).toString() });
+        }
+    }
+
+    for (const OldTile &oldTile : oldTiles) {
+        // Key layout: 10 digits provider, 8 digits x, 8 digits y, 3 digits z
+        const QString suffix = oldTile.hash.mid(10);
+        if ((oldTile.setID != 0) && (oldTile.setID != defaultSet) && (suffix.length() == 19)) {
+            (void) query.prepare("INSERT OR IGNORE INTO TilesDownload(setID, hash, type, x, y, z, state) VALUES(?, ?, ?, ?, ?, ?, 0)");
+            query.addBindValue(oldTile.setID);
+            query.addBindValue(newPrefix + suffix);
+            query.addBindValue(qtMapId);
+            query.addBindValue(suffix.mid(0, 8).toInt());
+            query.addBindValue(suffix.mid(8, 8).toInt());
+            query.addBindValue(suffix.mid(16, 3).toInt());
+            (void) query.exec();
+        }
+    }
+
+    (void) query.prepare("DELETE FROM SetTiles WHERE tileID IN (SELECT tileID FROM Tiles WHERE hash >= ? AND hash < ?)");
+    query.addBindValue(from);
+    query.addBindValue(to);
+    (void) query.exec();
+    (void) query.prepare("DELETE FROM Tiles WHERE hash >= ? AND hash < ?");
+    query.addBindValue(from);
+    query.addBindValue(to);
+    if (query.exec()) {
+        migrated += query.numRowsAffected();
+    }
+
+    if (!db.commit()) {
+        qCWarning(QGCTileCacheWorkerLog) << "Copernicus key migration: commit failed" << db.lastError().text();
+        (void) db.rollback();
+        return 0;
+    }
+
+    if (migrated > 0) {
+        qCInfo(QGCTileCacheWorkerLog) << "Copernicus key migration: old tiles and pending rows migrated:" << migrated;
+    }
+    return migrated;
 }
 
 bool QGCCacheWorker::_findTileSetID(const QString &name, quint64 &setID)
@@ -821,6 +910,8 @@ void QGCCacheWorker::_importSets(QGCMapTask *mtask)
             task->setError("Error opening import database");
         }
     }
+    // A set exported by an older GC holds Copernicus tiles under the old key
+    (void) migrateCopernicusTileKeys(*_db);
     task->setImportCompleted();
 }
 

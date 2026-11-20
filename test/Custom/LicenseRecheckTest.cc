@@ -1,4 +1,5 @@
 #include "LicenseRecheckTest.h"
+#include "LicenseTestRecords.h"
 
 #include "LicenseManager.h"
 
@@ -14,25 +15,38 @@ const QString kKey = QStringLiteral("TEST-0000-0000-0001");
 bool noVehicle()  { return false; }
 bool oneVehicle() { return true; }
 
+/// The signed offline record (G89).
 bool recordStored()
 {
-    return QSettings().contains(QStringLiteral("svc/rk"));
+    return QSettings().contains(QStringLiteral("svc/sr"));
 }
 
 } // namespace
 
+QByteArray LicenseRecheckTest::_goodReply(LicenseManager &lm, const QString &state)
+{
+    const LicenseTestRecords::Signer s = LicenseTestRecords::makeSigner();
+    lm._pinned = {s.pinned()};
+    const qint64 now = QDateTime::currentSecsSinceEpoch();
+    return LicenseTestRecords::reply(
+        state, LicenseTestRecords::envelope(
+                   s, LicenseTestRecords::recordObject(s, lm._deviceId, kKey, now, now + 14 * 24 * 60 * 60)));
+}
+
 void LicenseRecheckTest::_openSession(LicenseManager &lm)
 {
-    lm._key = kKey;
-    lm._saveRecord(kKey);
-    lm._setActivated(true);
-    lm._inSession = true;
+    lm._handleReply(LicenseManager::Op::Activate, kKey, _goodReply(lm, QStringLiteral("activated")), true, 200);
+    QVERIFY(lm.activated());
+    QVERIFY(lm._inSession);
+    QCOMPARE(lm._key, kKey);
 }
 
 void LicenseRecheckTest::cleanup()
 {
     QSettings s;
-    s.remove(QStringLiteral("svc/rk"));
+    for (const char *k : {"svc/sr", "svc/lk", "svc/rk", "svc/hw", "svc/mg", "svc/sv"}) {
+        s.remove(QLatin1String(k));
+    }
     s.sync();
     UnitTest::cleanup();
 }
@@ -86,7 +100,7 @@ void LicenseRecheckTest::_inSessionValidClearsNote()
     _openSession(lm);
     lm._handleReply(LicenseManager::Op::Verify, kKey, QByteArrayLiteral(R"({"state":"expired"})"), true, 200);
     QVERIFY(lm.attention());
-    lm._handleReply(LicenseManager::Op::Verify, kKey, QByteArrayLiteral(R"({"state":"valid"})"), true, 200);
+    lm._handleReply(LicenseManager::Op::Verify, kKey, _goodReply(lm, QStringLiteral("valid")), true, 200);
     QVERIFY(lm.activated());
     QVERIFY(!lm.attention());
     QVERIFY(lm.statusText().startsWith(QStringLiteral("License valid")));
@@ -98,9 +112,8 @@ void LicenseRecheckTest::_firstVerifyIsTheLaunchCheck()
     // as it always has: this is the start, not a flight.
     LicenseManager lm;
     lm._vehicleConnected = &noVehicle;
-    lm._key = kKey;
-    lm._saveRecord(kKey);
-    lm._setActivated(true);
+    _openSession(lm);
+    QVERIFY(recordStored());
     lm._inSession = false;
     lm._handleReply(LicenseManager::Op::Verify, kKey, QByteArrayLiteral(R"({"state":"expired"})"), true, 200);
     QVERIFY(!lm.activated());
@@ -109,9 +122,7 @@ void LicenseRecheckTest::_firstVerifyIsTheLaunchCheck()
 
     // An offline launch check opens the session too: later checks only note.
     LicenseManager offline;
-    offline._key = kKey;
-    offline._saveRecord(kKey);
-    offline._setActivated(true);
+    _openSession(offline);
     offline._inSession = false;
     offline._handleReply(LicenseManager::Op::Verify, kKey, {}, false, 0);
     QVERIFY(offline._inSession);
@@ -124,7 +135,7 @@ void LicenseRecheckTest::_activationOpensSession()
 {
     LicenseManager lm;
     lm._inSession = false;
-    lm._handleReply(LicenseManager::Op::Activate, kKey, QByteArrayLiteral(R"({"state":"activated"})"), true, 200);
+    lm._handleReply(LicenseManager::Op::Activate, kKey, _goodReply(lm, QStringLiteral("activated")), true, 200);
     QVERIFY(lm.activated());
     QVERIFY(lm._inSession);
     lm._handleReply(LicenseManager::Op::Verify, kKey, QByteArrayLiteral(R"({"state":"expired"})"), true, 200);
@@ -179,9 +190,7 @@ void LicenseRecheckTest::_lateLaunchReplyWhileConnectedOnlyNotes()
     // is connected when it lands: note only, the gate stays down.
     LicenseManager lm;
     lm._vehicleConnected = &oneVehicle;
-    lm._key = kKey;
-    lm._saveRecord(kKey);
-    lm._setActivated(true);
+    _openSession(lm);
     lm._inSession = false;
     lm._handleReply(LicenseManager::Op::Verify, kKey, QByteArrayLiteral(R"({"state":"revoked"})"), true, 200);
     QVERIFY(lm.activated());

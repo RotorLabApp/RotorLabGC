@@ -30,10 +30,19 @@ namespace {
 /// scanning a log directory on a field laptop is a cost with no benefit.
 constexpr int kSweepMs = 15000;
 
-/// Give up pulling one log off the aircraft after this many tries. Not zero -
-/// a radio drops - but not unlimited either, or a log that genuinely is not on
-/// the card blocks the queue behind it for a day.
-constexpr int kMaxCollectAttempts = 3;
+// Pulling one log off the aircraft gives up after
+// LogCollectPolicy::kMaxCollectAttempts real failures, spaced 30 s, 2 min and
+// 10 min apart. Not zero - a radio drops - but not unlimited either, or a log
+// that genuinely is not on the card blocks the queue behind it for a day.
+// An attempt the aircraft refused because it was armed is not counted.
+
+QString waitText(qint64 ms)
+{
+    if (ms >= 60 * 1000) {
+        return QStringLiteral("%1 min").arg(ms / (60 * 1000));
+    }
+    return QStringLiteral("%1 s").arg(ms / 1000);
+}
 
 /// How many times to re-send a log before parking it in front of the operator.
 /// Generous, because the failure this exists for is a big file over a bad link
@@ -202,15 +211,24 @@ void FleetLogs::_sweep()
     if (!FleetStore::collectLogsAutomatically()) {
         return;
     }
+    // Only once the aircraft reports disarmed and the flight's end has passed,
+    // and not before an entry's retry wait is over.
+    const qint64 now   = QDateTime::currentMSecsSinceEpoch();
+    const bool   armed = LogCollector::anyAircraftArmed();
     for (Entry &e : _entries) {
-        if (e.state == Entry::State::Waiting && e.collectAttempts < kMaxCollectAttempts) {
-            QString whyNot;
-            if (!_canCollect(&whyNot)) {
-                return;         // not now; the reason is transient by nature
-            }
-            _startCollect(e);
-            return;
+        if (e.state != Entry::State::Waiting) {
+            continue;
         }
+        if (!LogCollectPolicy::mayStart(e.collectTries, now, e.ended > 0 ? e.ended : e.started,
+                                        armed)) {
+            continue;
+        }
+        QString whyNot;
+        if (!_canCollect(&whyNot)) {
+            return;         // not now; the reason is transient by nature
+        }
+        _startCollect(e);
+        return;
     }
 }
 
@@ -234,7 +252,6 @@ void FleetLogs::_startCollect(Entry &e)
 {
     LogCollector *const lc = LogCollector::instance();
 
-    ++e.collectAttempts;
     e.state    = Entry::State::Collecting;
     e.progress = 0.0;
     e.detail   = QStringLiteral("asking the aircraft for its log");
@@ -275,7 +292,7 @@ void FleetLogs::_startCollect(Entry &e)
     }));
 
     conns->append(connect(lc, &LogCollector::failed, this,
-                          [this, ref, done](const QString &why, bool retryable) {
+                          [this, ref, done](const QString &why, bool retryable, bool armed) {
         done();
         _collecting = false;
         _currentRef.clear();
@@ -284,16 +301,36 @@ void FleetLogs::_startCollect(Entry &e)
             return;
         }
         if (!retryable) {
+            qCWarning(FleetLogsLog) << it->callsign << "log not collected:" << why;
             _park(*it, why, false, /*onSize*/ true);
             return;
         }
-        // A radio drops. Not parked - the next sweep tries again until the
-        // attempt limit, and after that the crew attaches the file by hand.
+        // A radio drops. Not parked - a later sweep tries again, spaced out,
+        // until the attempt limit, and after that the crew attaches the file by
+        // hand. An armed aircraft only waits for the disarm.
+        const qint64 now   = QDateTime::currentMSecsSinceEpoch();
+        const bool  gaveUp = LogCollectPolicy::recordFailure(it->collectTries, why, armed, now);
+        const int   used   = it->collectTries.used;
+        const int   limit  = LogCollectPolicy::kMaxCollectAttempts;
+        QString line;
+        if (armed) {
+            it->detail = QStringLiteral("waiting for the aircraft to disarm");
+            line = QStringLiteral("%1: log not collected yet: %2. Waiting for the disarm; "
+                                  "not counted as an attempt").arg(it->callsign, why);
+        } else if (gaveUp) {
+            it->detail = LogCollectPolicy::gaveUpText(why);
+            line = QStringLiteral("%1: log attempt %2 of %3 failed: %4. Giving up; "
+                                  "attach it by hand").arg(it->callsign).arg(used).arg(limit).arg(why);
+        } else {
+            const QString wait = waitText(LogCollectPolicy::retryDelayMs(used));
+            it->detail = QStringLiteral("%1. Trying again in %2").arg(why, wait);
+            line = QStringLiteral("%1: log attempt %2 of %3 failed: %4. Trying again in %5")
+                       .arg(it->callsign).arg(used).arg(limit).arg(why, wait);
+        }
+        qCWarning(FleetLogsLog) << line;
+        emit logMessage(line);
         it->state    = Entry::State::Waiting;
         it->progress = 0.0;
-        it->detail   = (it->collectAttempts >= kMaxCollectAttempts)
-            ? QStringLiteral("could not download it from the aircraft: attach it by hand")
-            : why;
         _save();
         emit modelChanged();
     }));
@@ -514,7 +551,7 @@ void FleetLogs::retry(const QString &externalRef)
     if (!e) {
         return;
     }
-    e->collectAttempts = 0;
+    e->collectTries    = {};
     e->uploadAttempts  = 0;
     e->parkedOnSize    = false;
     e->state  = e->path.isEmpty() ? Entry::State::Waiting : Entry::State::Ready;

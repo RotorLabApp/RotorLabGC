@@ -209,7 +209,16 @@ Marker parse(const QByteArray &xml)
         const QStringView name = r.name();
         if (name == QLatin1String("event")) {
             haveEvent = true;
-            m.uid = r.attributes().value(QLatin1String("uid")).toString();
+            const auto a = r.attributes();
+            m.uid   = a.value(QLatin1String("uid")).toString();
+            m.type  = a.value(QLatin1String("type")).toString();
+            m.how   = a.value(QLatin1String("how")).toString();
+            m.time  = QDateTime::fromString(a.value(QLatin1String("time")).toString(), Qt::ISODateWithMs);
+            m.stale = QDateTime::fromString(a.value(QLatin1String("stale")).toString(), Qt::ISODateWithMs);
+        } else if (name == QLatin1String("takv") || name == QLatin1String("__group")) {
+            // Only a TAK device's own report carries these (its position
+            // report, PLI). A placed marker does not.
+            m.isEud = true;
         } else if (name == QLatin1String("point")) {
             const auto a = r.attributes();
             bool okLat = false, okLon = false;
@@ -232,10 +241,13 @@ Marker parse(const QByteArray &xml)
             }
         } else if (name == QLatin1String("link")) {
             // The p-p (parent) link names the EUD that placed the marker. ATAK
-            // stamps it with the device uid and the operator's callsign.
+            // stamps it with the device uid and the operator's callsign. The
+            // sender comes from the first p-p link only: a link of any other
+            // relation names some other entity, never the creator (G44).
             const auto a = r.attributes();
             const bool isParent = a.value(QLatin1String("relation")) == QLatin1String("p-p");
-            if (isParent || m.senderUid.isEmpty()) {
+            if (isParent && !m.hasParentLink) {
+                m.hasParentLink  = true;
                 m.senderUid      = a.value(QLatin1String("uid")).toString();
                 m.senderCallsign = a.value(QLatin1String("parent_callsign")).toString();
             }

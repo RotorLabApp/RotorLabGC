@@ -21,6 +21,7 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QDateTime>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
 
@@ -80,8 +81,14 @@ struct Marker {
     QString callsign;              ///< detail/contact@callsign (may carry a verb)
     QString destCallsign;          ///< detail/marti/dest@callsign (send-to target)
     QString uid;                   ///< event@uid
-    QString senderUid;             ///< detail/link@uid of the placing EUD (relation p-p)
-    QString senderCallsign;        ///< detail/link@parent_callsign of the placing EUD
+    QString type;                  ///< event@type (a-u-G, b-m-p-s-m, a-f-G-U-C, ...)
+    QString how;                   ///< event@how: h-* placed by a person, m-* machine-generated
+    QDateTime time;                ///< event@time (UTC); invalid when missing or unreadable
+    QDateTime stale;               ///< event@stale (UTC); invalid when missing or unreadable
+    bool    isEud = false;         ///< carries <takv> or <__group>: a device's own report (PLI)
+    QString senderUid;             ///< detail/link@uid of the placing EUD (relation p-p only)
+    QString senderCallsign;        ///< detail/link@parent_callsign of the placing EUD (p-p only)
+    bool    hasParentLink = false; ///< a <link relation="p-p"> was present
 };
 
 /// Parse one <event>...</event> chunk. Returns an invalid Marker on any error.

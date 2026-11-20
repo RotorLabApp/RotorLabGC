@@ -21,4 +21,10 @@ private slots:
     void _pilotList();
     void _serverFingerprint();
     void _defaults();
+    // G47, G48: addressing
+    void _addressGrammar();
+    void _prefixFormat();
+    void _fleetCallsignNameable();
+    void _classifyAddress();
+    void _addressTexts();
 };

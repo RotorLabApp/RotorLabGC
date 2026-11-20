@@ -1,0 +1,6 @@
+<RCC>
+    <!-- G64/G65: test-only autorun, Daily builds only (custom/CMakeLists.txt, NOT QGC_STABLE_BUILD) -->
+    <qresource prefix="/rotorlab/plan3d">
+        <file alias="Plan3DAutorun.qml">Plan3DAutorun.qml</file>
+    </qresource>
+</RCC>

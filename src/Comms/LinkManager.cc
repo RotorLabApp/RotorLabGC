@@ -120,8 +120,38 @@ void LinkManager::createConnectedLink(const LinkConfiguration *config)
     }
 }
 
+void LinkManager::setLinksAllowed(bool allowed, const QString &refusedText)
+{
+    if (!refusedText.isEmpty()) {
+        _linksRefusedText = refusedText;
+    }
+    if (_linksAllowed.load() == allowed) {
+        return;
+    }
+    _linksAllowed.store(allowed);
+    qCDebug(LinkManagerLog) << "links allowed" << allowed;
+    emit linksAllowedChanged(allowed);
+
+    if (allowed) {
+        // Configurations already loaded start now; the auto-connect timer
+        // adds the UDP and serial auto-connect links on its next pass.
+        startAutoConnectedLinks();
+    } else {
+        // Nothing may stay open to a vehicle, and nothing may send.
+        disconnectAll();
+    }
+}
+
 bool LinkManager::createConnectedLink(SharedLinkConfigurationPtr &config)
 {
+    if (!_linksAllowed.load()) {
+        qCDebug(LinkManagerLog) << "link refused, links not allowed:" << (config ? config->name() : QString());
+        const QString text = _linksRefusedText.isEmpty() ? tr("RotorLab GC does not connect to vehicles until this device is activated.") : _linksRefusedText;
+        emit linkRefused(text);
+        qgcApp()->showAppMessage(text);
+        return false;
+    }
+
     SharedLinkInterfacePtr link = nullptr;
 
     switch(config->type()) {
@@ -498,7 +528,7 @@ void LinkManager::_addZeroConfAutoConnectLink()
 
 void LinkManager::_updateAutoConnectLinks()
 {
-    if (_connectionsSuspended) {
+    if (_connectionsSuspended || !_linksAllowed.load()) {
         return;
     }
 
@@ -691,8 +721,13 @@ SharedLinkConfigurationPtr LinkManager::addConfiguration(LinkConfiguration *conf
 
 void LinkManager::startAutoConnectedLinks()
 {
+    if (!_linksAllowed.load()) {
+        qCDebug(LinkManagerLog) << "auto-connect links held: links not allowed";
+        return;
+    }
+
     for (SharedLinkConfigurationPtr &sharedConfig : _rgLinkConfigs) {
-        if (sharedConfig->isAutoConnect()) {
+        if (sharedConfig->isAutoConnect() && !sharedConfig->link()) {
             createConnectedLink(sharedConfig);
         }
     }

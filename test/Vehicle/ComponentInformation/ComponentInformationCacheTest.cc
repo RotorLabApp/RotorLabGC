@@ -71,6 +71,9 @@ void ComponentInformationCacheTest::_basic_test()
     QVERIFY(f.open(QFile::ReadOnly | QFile::Text));
     QTextStream in(&f);
     QVERIFY(in.readAll() == _tmpFiles[0].content);
+    // RotorLab: close before cleanup; Windows cannot delete an open file, and
+    // the leftover cache file broke _lru_test and _multi_test (CI run 44167460910).
+    f.close();
 
     _cleanup();
 }

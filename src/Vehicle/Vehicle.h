@@ -105,6 +105,7 @@ class Vehicle : public VehicleFactGroup
     friend class SendMavCommandWithSignallingTest;  // Unit test
     friend class SendMavCommandWithHandlerTest;     // Unit test
     friend class RequestMessageTest;                // Unit test
+    friend class QGCCameraManagerTest;              // Unit test
     friend class GimbalController;                  // Allow GimbalController to call _addFactGroup
 
 public:
@@ -722,6 +723,10 @@ public:
     ///     @param resultHandler Callback for result
     ///     @param resultHandlerData Opaque data passed back to resultHandler
     void requestMessage(RequestMessageResultHandler resultHandler, void* resultHandlerData, int compId, int messageId, float param1 = 0.0f, float param2 = 0.0f, float param3 = 0.0f, float param4 = 0.0f, float param5 = 0.0f);
+
+    /// Drops all pending sendMavCommandWithHandler and requestMessage calls whose handler data is the specified pointer.
+    /// The handlers are not called. Must be called before the object handlerData points to is deleted.
+    void cancelPendingHandlers(const void* handlerData);
 
     int firmwareMajorVersion() const { return _firmwareMajorVersion; }
     int firmwareMinorVersion() const { return _firmwareMinorVersion; }

@@ -5,7 +5,7 @@ What RotorLab GC 5.1.1 does not do, and the limits a team should plan around. Ea
 ## What GC is not
 
 - **Not an authority.** GC records and warns. It never authorizes, approves or clears a flight, and it makes no compliance determination. Readiness words, currency warnings and a green state are RotorLab's records, shown as they are.
-- **Not a safety system.** Nothing in RotorLab's features holds up arming, a launch or video. The crew screen and the checklist offers can always be skipped. The remote pilot in command stays responsible for the aircraft.
+- **Not a safety system.** Nothing in RotorLab's features holds up arming or a launch. The crew screen and the checklist offers can always be skipped. The remote pilot in command stays responsible for the aircraft.
 - **Not a check on altitude, airspace or terrain.** An ATAK `ALT` value is sent as given. The optional altitude warning informs the station; it does not hold or change a command. See the [ATAK and TAK Field Guide](https://github.com/RotorLabApp/rotorlab-gc-tak-guide), chapter 5.
 
 ## Filing
@@ -36,5 +36,4 @@ The full list is in the [ATAK and TAK Field Guide](https://github.com/RotorLabAp
 ## Platforms
 
 - **Released for Windows x64 and Android arm64 only.** Other platforms in QGroundControl's tree are not built or published by RotorLab.
-- **Video through Qt Multimedia.** The released builds do not include GStreamer, so some stream types QGroundControl plays with GStreamer may not play. Test your video source before you rely on it.
 - **What was not run for 5.1.1:** the APK on an Android device, PX4 aircraft, and Windows 10. See [compatibility](compatibility.md).

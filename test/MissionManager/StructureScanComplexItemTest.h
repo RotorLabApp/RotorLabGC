@@ -10,10 +10,12 @@
 #pragma once
 
 #include "UnitTest.h"
+#include "QGCMAVLink.h"
 
 class PlanMasterController;
 class StructureScanComplexItem;
 class MultiSignalSpy;
+class MissionItem;
 
 class StructureScanComplexItemTest : public UnitTest
 {
@@ -30,10 +32,15 @@ private slots:
     void _testDirty(void);
     void _testSaveLoad(void);
     void _testItemCount(void);
+    void _testArduPilotNoRoiWpNextOffset(void);
+    void _testPX4KeepsRoiWpNextOffset(void);
+    void _testGimbalPitchReadOnlyOnArduPilot(void);
+    void _testLayerBoundAtLoad(void);
 
 private:
     void _initItem(void);
     void _validateItem(StructureScanComplexItem* item);
+    QList<MissionItem*> _expandForFirmware(MAV_AUTOPILOT firmwareType, PlanMasterController*& masterController);
 
     enum {
         dirtyChangedIndex,
@@ -51,4 +58,5 @@ private:
     MultiSignalSpy*             _multiSpy =             nullptr;
     StructureScanComplexItem*   _structureScanItem =    nullptr;
     QList<QGeoCoordinate>       _polyPoints;
+    int                         _lastSequenceNumber =   -1;
 };

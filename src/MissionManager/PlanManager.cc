@@ -9,6 +9,9 @@
 
 #include "PlanManager.h"
 #include "Vehicle.h"
+#include "MissionManager.h"
+#include "GeoFenceManager.h"
+#include "RallyPointManager.h"
 #include "FirmwarePlugin.h"
 #include "MAVLinkProtocol.h"
 #include "QGCApplication.h"
@@ -56,6 +59,9 @@ void PlanManager::_writeMissionItemsWorker(void)
     }
 
     _retryCount = 0;
+    _writeStallCount = 0;
+    _busyRetryCount = 0;
+    _sawVehicleBusy = false;
     _setTransactionInProgress(TransactionWrite);
     _connectToMavlink();
     _writeMissionCount();
@@ -107,6 +113,10 @@ void PlanManager::_writeMissionCount(void)
 {
     qCDebug(PlanManagerLog) << QStringLiteral("_writeMissionCount %1 count:_retryCount").arg(_planTypeString()) << _writeMissionItems.count() << _retryCount;
 
+    // Remember who this upload is with, so a cancel for it goes to exactly the same target
+    _writeTargetSystem = static_cast<uint8_t>(_vehicle->id());
+    _writeTargetComponent = MAV_COMP_ID_AUTOPILOT1;
+
     SharedLinkInterfacePtr sharedLink = _vehicle->vehicleLinkManager()->primaryLink().lock();
     if (sharedLink) {
         mavlink_message_t       message;
@@ -116,8 +126,8 @@ void PlanManager::_writeMissionCount(void)
             MAVLinkProtocol::getComponentId(),
             sharedLink->mavlinkChannel(),
             &message,
-            _vehicle->id(),
-            MAV_COMP_ID_AUTOPILOT1,
+            _writeTargetSystem,
+            _writeTargetComponent,
             _writeMissionItems.count(),
             _planType,
             0
@@ -206,24 +216,46 @@ void PlanManager::_ackTimeout(void)
         break;
     case AckMissionRequest:
         // MISSION_REQUEST is expected, or MISSION_ACK to end sequence
-        if (_itemIndicesToWrite.count() == 0) {
-            // Vehicle did not send final MISSION_ACK at end of sequence
-            _sendError(ProtocolError, tr("Mission write failed, vehicle failed to send final ack."));
-            _finishTransaction(false);
-        } else if (_itemIndicesToWrite[0] == 0) {
-            // Vehicle did not respond to MISSION_COUNT, try again
+        if (_lastMissionRequest == -1) {
+            // Vehicle has not answered MISSION_COUNT yet, try again. For a non-empty list the answer is MISSION_REQUEST(_INT) 0.
+            // For an empty list (count 0) there are no requests: the MISSION_ACK is the only answer to MISSION_COUNT, so a lost
+            // count, a lost ack or a busy vehicle must be retried here too instead of failing as a missing final ack (G92).
+            // Resending MISSION_COUNT 0 is safe: PX4 and ArduPilot just clear the list again and ack.
             if (_retryCount > _maxRetryCount) {
-                _sendError(MaxRetryExceeded, tr("Mission write mission count failed, maximum retries exceeded."));
+                if (_sawVehicleBusy) {
+                    // The vehicle answered with Busy, so our MISSION_COUNT never opened a transfer: nothing of ours to cancel
+                    _sendError(VehicleBusyError, tr("Upload stopped: the vehicle is busy with another mission transfer, possibly from another ground station. Try again when it completes."));
+                } else {
+                    _sendError(MaxRetryExceeded, tr("Mission write mission count failed, maximum retries exceeded."));
+                    // One of our counts may have opened a transfer whose requests we never received
+                    _cancelOwnWrite();
+                }
                 _finishTransaction(false);
             } else {
                 _retryCount++;
                 qCDebug(PlanManagerLog) << QStringLiteral("Retrying %1 MISSION_COUNT retry Count").arg(_planTypeString()) << _retryCount;
                 _writeMissionCount();
             }
+        } else if (_itemIndicesToWrite.count() == 0) {
+            // Vehicle did not send final MISSION_ACK at end of sequence
+            _sendError(ProtocolError, tr("Mission write failed, vehicle failed to send final ack."));
+            _cancelOwnWrite();
+            _finishTransaction(false);
+        } else if (_writeStallCount < _maxWriteStallCount) {
+            // The vehicle has started requesting items but has gone quiet. It re-requests on its own (PX4 every 250 ms), so a
+            // lost MISSION_REQUEST or MISSION_ITEM_INT heals without us. Keep waiting instead of failing at the first quiet
+            // ack timeout (G93: a 302 item upload over a lossy UDP forward failed this way).
+            _writeStallCount++;
+            qCDebug(PlanManagerLog) << QStringLiteral("_ackTimeout %1 no MISSION_REQUEST yet, waiting again, stall count").arg(_planTypeString()) << _writeStallCount;
+            _startAckTimeout(AckMissionRequest);
         } else {
             // Vehicle did not request all items from ground station
             _sendError(ProtocolError, tr("Vehicle did not request all items from ground station: %1").arg(_ackTypeToString(_expectedAck)));
             _expectedAck = AckNone;
+            // Tell the vehicle we gave up. Otherwise PX4 stays in its receive state until its own 5 s timeout and answers
+            // the GeoFence and Rally MISSION_COUNTs that follow with "WPM: REJ. CMD: Busy" (G93 cascade). The vehicle has
+            // been requesting items from us, so this transfer is ours.
+            _cancelOwnWrite();
             _finishTransaction(false);
         }
         break;
@@ -247,7 +279,7 @@ void PlanManager::_ackTimeout(void)
     }
 }
 
-void PlanManager::_startAckTimeout(AckType_t ack)
+void PlanManager::_startAckTimeout(AckType_t ack, int intervalMilliseconds)
 {
     switch (ack) {
     case AckMissionItem:
@@ -265,6 +297,10 @@ void PlanManager::_startAckTimeout(AckType_t ack)
     case AckGuidedItem:
         _ackTimeoutTimer->setInterval(_ackTimeoutMilliseconds);
         break;
+    }
+
+    if (intervalMilliseconds > 0) {
+        _ackTimeoutTimer->setInterval(intervalMilliseconds);
     }
 
     _expectedAck = ack;
@@ -498,6 +534,12 @@ void PlanManager::_handleMissionRequest(const mavlink_message_t& message)
     missionRequestMissionType = static_cast<MAV_MISSION_TYPE>(missionRequest.mission_type);
     missionRequestSeq = missionRequest.seq;
 
+    if (!_addressedToThisGcs(missionRequest.target_system, missionRequest.target_component, true /* allowBroadcast */)) {
+        // The vehicle is requesting items for another ground station's upload, not ours
+        qCDebug(PlanManagerLog) << QStringLiteral("_handleMissionRequest %1 request addressed to another GCS, ignored").arg(_planTypeString()) << missionRequest.target_system << missionRequest.target_component;
+        return;
+    }
+
     if (missionRequestMissionType != _planType) {
         // if there was a previous transaction with a different mission_type, it can happen that we receive
         // a stale message here, for example when the MAV ran into a timeout and sent a message twice
@@ -520,6 +562,7 @@ void PlanManager::_handleMissionRequest(const mavlink_message_t& message)
     emit progressPctChanged((double)missionRequestSeq / (double)_writeMissionItems.count());
 
     _lastMissionRequest = missionRequestSeq;
+    _writeStallCount = 0;
     if (!_itemIndicesToWrite.contains(missionRequestSeq)) {
         qCDebug(PlanManagerLog) << QStringLiteral("_handleMissionRequest %1 sequence number requested which has already been sent, sending again:").arg(_planTypeString()) << missionRequestSeq;
     } else {
@@ -562,10 +605,31 @@ void PlanManager::_handleMissionAck(const mavlink_message_t& message)
     mavlink_mission_ack_t missionAck;
 
     mavlink_msg_mission_ack_decode(&message, &missionAck);
+
+    // True while we wait for the vehicle's answer to our MISSION_COUNT (no MISSION_REQUEST seen yet)
+    const bool waitingForCountAnswer = _transactionInProgress == TransactionWrite && _expectedAck == AckMissionRequest && _lastMissionRequest == -1;
+
+    if (!_addressedToThisGcs(missionAck.target_system, missionAck.target_component, true /* allowBroadcast */)) {
+        // PX4 sends its Busy reject to the partner of the transfer it holds. An error ack to another ground station
+        // while we wait on our MISSION_COUNT means that station holds the transfer: back off, never cancel it.
+        if (waitingForCountAnswer && missionAck.type != MAV_MISSION_ACCEPTED) {
+            qCDebug(PlanManagerLog) << QStringLiteral("_handleMissionAck %1 vehicle busy with another GCS transfer").arg(_planTypeString()) << missionAck.target_system << missionAck.target_component;
+            _handleVehicleBusy(static_cast<MAV_MISSION_TYPE>(missionAck.mission_type), false /* ackAddressedToThisGcs */);
+        }
+        return;
+    }
+    const bool ackAddressedToThisGcs = _addressedToThisGcs(missionAck.target_system, missionAck.target_component, false /* allowBroadcast */);
+
     if (missionAck.mission_type != _planType) {
         // if there was a previous transaction with a different mission_type, it can happen that we receive
         // a stale message here, for example when the MAV ran into a timeout and sent a message twice
         qCDebug(PlanManagerLog) << QStringLiteral("_handleMissionAck %1 Incorrect mission_type received expected:actual").arg(_planTypeString()) << _planType << missionAck.mission_type;
+
+        if (waitingForCountAnswer && missionAck.type != MAV_MISSION_ACCEPTED) {
+            // The vehicle rejected our MISSION_COUNT because an upload of another type is still open on its side. PX4 logs
+            // "WPM: REJ. CMD: Busy" and answers MAV_MISSION_ERROR stamped with the mission_type of the open upload, not ours.
+            _handleVehicleBusy(static_cast<MAV_MISSION_TYPE>(missionAck.mission_type), ackAddressedToThisGcs);
+        }
         return;
     }
 
@@ -609,7 +673,13 @@ void PlanManager::_handleMissionAck(const mavlink_message_t& message)
         break;
     case AckMissionRequest:
         // MISSION_REQUEST is expected, or MAV_MISSION_ACCEPTED to end sequence
-        if (missionAck.type == MAV_MISSION_ACCEPTED) {
+        if (_vehicle->px4Firmware() && missionAck.type == MAV_MISSION_ERROR && _lastMissionRequest == -1) {
+            // PX4 answers MISSION_COUNT with MAV_MISSION_ERROR only when it is busy: a transfer is still open on its side
+            // ("WPM: REJ. CMD: Busy", "WPM: IGN MISSION_COUNT: Busy") or another link holds the transfer lock.
+            // _checkForExpectedAck moved us out of AckMissionRequest; put it back so the busy handling sees the same state.
+            _expectedAck = AckMissionRequest;
+            _handleVehicleBusy(_planType, ackAddressedToThisGcs);
+        } else if (missionAck.type == MAV_MISSION_ACCEPTED) {
             if (_itemIndicesToWrite.count() == 0) {
                 qCDebug(PlanManagerLog) << QStringLiteral("_handleMissionAck write sequence complete %1").arg(_planTypeString());
                 _finishTransaction(true);
@@ -814,6 +884,11 @@ void PlanManager::_finishTransaction(bool success, bool apmGuidedItemWrite)
     _itemIndicesToRead.clear();
     _itemIndicesToWrite.clear();
 
+    if (success) {
+        // The vehicle completed a transfer of this type with us, so nothing of ours is left open on it
+        _abandonedWrite = false;
+    }
+
     // First thing we do is clear the transaction. This way inProgesss is off when we signal transaction complete.
     TransactionType_t currentTransactionType = _transactionInProgress;
     _setTransactionInProgress(TransactionNone);
@@ -960,6 +1035,113 @@ QString PlanManager::_planTypeString(void)
         qWarning() << "Unknown plan type" << _planType;
         return QStringLiteral("T:Unknown");
     }
+}
+
+bool PlanManager::_addressedToThisGcs(uint8_t targetSystem, uint8_t targetComponent, bool allowBroadcast)
+{
+    const uint8_t ourSystem = static_cast<uint8_t>(MAVLinkProtocol::instance()->getSystemId());
+    const uint8_t ourComponent = static_cast<uint8_t>(MAVLinkProtocol::getComponentId());
+    const bool systemMatch = (targetSystem == ourSystem) || (allowBroadcast && targetSystem == 0);
+    const bool componentMatch = (targetComponent == ourComponent) || (allowBroadcast && targetComponent == MAV_COMP_ID_ALL);
+    return systemMatch && componentMatch;
+}
+
+PlanManager* PlanManager::_planManagerForType(MAV_MISSION_TYPE missionType) const
+{
+    switch (missionType) {
+    case MAV_MISSION_TYPE_MISSION:
+        return _vehicle->missionManager();
+    case MAV_MISSION_TYPE_FENCE:
+        return _vehicle->geoFenceManager();
+    case MAV_MISSION_TYPE_RALLY:
+        return _vehicle->rallyPointManager();
+    default:
+        return nullptr;
+    }
+}
+
+void PlanManager::_markAbandonedWrite(void)
+{
+    _abandonedWrite = true;
+    _abandonedTimer.start();
+}
+
+bool PlanManager::_ownsAbandonedWrite(void) const
+{
+    return _abandonedWrite && _abandonedTimer.isValid() && _abandonedTimer.elapsed() < _abandonedOwnershipMilliseconds;
+}
+
+void PlanManager::_cancelOwnWrite(void)
+{
+    // Only called while our own write transaction is failing: the transfer being cancelled is the one this manager
+    // started, and the cancel goes to the same system and component our MISSION_COUNT went to. If the cancel is lost
+    // we remember the abandoned upload so a later Busy reply addressed to us can cancel it once more (_handleVehicleBusy).
+    _sendCancelAck(_planType, _writeTargetSystem, _writeTargetComponent);
+    _markAbandonedWrite();
+}
+
+/// The vehicle rejected our MISSION_COUNT because it is busy with a transfer of busyType.
+/// Cancel that transfer only if it is provably our own abandoned upload; otherwise back off and retry, then fail cleanly.
+void PlanManager::_handleVehicleBusy(MAV_MISSION_TYPE busyType, bool ackAddressedToThisGcs)
+{
+    _sawVehicleBusy = true;
+    _ackTimeoutTimer->stop();
+
+    PlanManager* const owner = _planManagerForType(busyType);
+    // The owner may be this manager (a new upload of the same type) but must not be another manager mid transfer
+    if (ackAddressedToThisGcs && owner && (owner == this || !owner->inProgress()) && owner->_ownsAbandonedWrite()) {
+        // PX4 addresses its reject to the partner of the open transfer, which is us, and this GC instance gave up on an
+        // upload of that type moments ago. Cancel it exactly once, then resend our MISSION_COUNT after one ack timeout.
+        qCDebug(PlanManagerLog) << QStringLiteral("_handleVehicleBusy %1 cancelling our own abandoned upload of type").arg(_planTypeString()) << busyType;
+        owner->_abandonedWrite = false;
+        _sendCancelAck(busyType, owner->_writeTargetSystem, owner->_writeTargetComponent);
+        if (_retryCount > _maxRetryCount) {
+            _sendError(VehicleBusyError, tr("Upload stopped: the vehicle stayed busy with another mission transfer. Try again when it completes."));
+            _finishTransaction(false);
+        } else {
+            _retryCount++;
+            _startAckTimeout(AckMissionRequest);
+        }
+        return;
+    }
+
+    // Not ours (another ground station, a TAK driven upload, or a transfer we cannot prove we started): never cancel it.
+    if (_busyRetryCount >= _maxBusyRetryCount) {
+        qCDebug(PlanManagerLog) << QStringLiteral("_handleVehicleBusy %1 vehicle still busy with a transfer we do not own, giving up").arg(_planTypeString()) << busyType;
+        _sendError(VehicleBusyError, tr("Upload stopped: the vehicle is busy with another mission transfer, possibly from another ground station. Try again when it completes."));
+        _finishTransaction(false);
+        return;
+    }
+    _busyRetryCount++;
+    qCDebug(PlanManagerLog) << QStringLiteral("_handleVehicleBusy %1 vehicle busy with a transfer we do not own, backing off, busy retry").arg(_planTypeString()) << _busyRetryCount;
+    // The timeout resends MISSION_COUNT
+    _startAckTimeout(AckMissionRequest, _busyBackoffMilliseconds);
+}
+
+void PlanManager::_sendCancelAck(MAV_MISSION_TYPE missionType, uint8_t targetSystem, uint8_t targetComponent)
+{
+    SharedLinkInterfacePtr sharedLink = _vehicle->vehicleLinkManager()->primaryLink().lock();
+    if (!sharedLink) {
+        return;
+    }
+
+    qCDebug(PlanManagerLog) << QStringLiteral("_sendCancelAck %1 mission_type:target").arg(_planTypeString()) << missionType << targetSystem << targetComponent;
+
+    // MAVLink mission protocol: either side may cancel an upload or download with MISSION_ACK MAV_MISSION_OPERATION_CANCELLED.
+    // PX4 (mavlink_mission.cpp handle_mission_ack) returns to idle on it, but only from its transfer partner.
+    mavlink_message_t message;
+    mavlink_msg_mission_ack_pack_chan(
+        MAVLinkProtocol::instance()->getSystemId(),
+        MAVLinkProtocol::getComponentId(),
+        sharedLink->mavlinkChannel(),
+        &message,
+        targetSystem,
+        targetComponent,
+        MAV_MISSION_OPERATION_CANCELLED,
+        missionType,
+        0
+    );
+    _vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), message);
 }
 
 void PlanManager::_setTransactionInProgress(TransactionType_t type)

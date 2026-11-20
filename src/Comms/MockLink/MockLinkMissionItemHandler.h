@@ -14,6 +14,8 @@
 #include <QtCore/QObject>
 #include <QtCore/QTimer>
 
+#include <atomic>
+
 #include "MAVLinkLib.h"
 
 class MockLink;
@@ -57,7 +59,13 @@ public:
         FailWriteFinalAckNoResponse,        // Don't send the final MISSION_ACK
         FailWriteFinalAckErrorAck,          // Send an error as the final MISSION_ACK
         FailWriteFinalAckMissingRequests,   // Send the MISSION_ACK before all items have been requested
+        FailWriteEmptyListFirstAckLost,     // Don't send the MISSION_ACK for the first MISSION_COUNT 0, ack subsequent ones (lost ack, G92)
+        FailWriteRequest1Delayed,           // Send MISSION_REQUEST 1 only after _writeRequestDelayMs, once (lost requests healed by vehicle retry, G93)
+        FailWriteRequest1NoResponseStaysBusy, // Never send MISSION_REQUEST 1 and keep the upload open like PX4 does, until cancelled (G93)
     };
+
+    /// Delay used by FailWriteRequest1Delayed: longer than one PlanManager ack timeout (1.5 s), shorter than PX4's 5 s
+    static constexpr int _writeRequestDelayMs = 2500;
 
     /// Sets a failure mode for unit testing
     ///     @param failureMode Type of failure to simulate
@@ -78,6 +86,22 @@ public:
 
     void setSendHomePositionOnEmptyList(bool sendHomePositionOnEmptyList) { _sendHomePositionOnEmptyList = sendHomePositionOnEmptyList; }
 
+    /// Emulates PX4 v1.15 with an upload of staleType still open (MAVLINK_WPM_STATE_GETLIST, seq > 0) whose transfer
+    /// partner is partnerSystemId/partnerComponentId (-1: this ground station). Every MISSION_COUNT is answered with
+    /// MISSION_ACK MAV_MISSION_ERROR stamped with staleType and addressed to that partner ("WPM: REJ. CMD: Busy"), until
+    /// the partner sends MISSION_ACK MAV_MISSION_OPERATION_CANCELLED for staleType. MAV_MISSION_TYPE_ENUM_END clears it.
+    void setBusyStaleTransfer(MAV_MISSION_TYPE staleType, int partnerSystemId = -1, int partnerComponentId = -1);
+    bool busyStaleTransfer() const { return _staleTransferType != MAV_MISSION_TYPE_ENUM_END; }
+
+    /// Drop (lose) the next MISSION_ACK MAV_MISSION_OPERATION_CANCELLED from the ground station
+    void setDropNextCancel(bool drop) { _dropNextCancel = drop; }
+
+    /// Number of MISSION_ACK MAV_MISSION_OPERATION_CANCELLED received from the ground station
+    int cancelAckCount() const { return _cancelAckCount; }
+
+    /// Number of MISSION_COUNT messages received from the ground station
+    int missionCountCount() const { return _missionCountCount; }
+
 private slots:
     void _missionItemResponseTimeout();
 
@@ -87,6 +111,8 @@ private:
     void _handleMissionItem(const mavlink_message_t &msg);
     void _handleMissionCount(const mavlink_message_t &msg);
     void _handleMissionClearAll(const mavlink_message_t &msg);
+    void _handleMissionAck(const mavlink_message_t &msg);
+    void _sendAckForType(MAV_MISSION_RESULT ackType, MAV_MISSION_TYPE missionType, uint8_t targetSystem, uint8_t targetComponent) const;
     void _requestNextMissionItem(int sequenceNumber);
     void _sendAck(MAV_MISSION_RESULT ackType) const;
     void _startMissionItemResponseTimer();
@@ -110,5 +136,13 @@ private:
     bool _failReadRequestListFirstResponse = true;
     bool _failReadRequest1FirstResponse = true;
     bool _failWriteMissionCountFirstResponse = true;
+    bool _failWriteEmptyListFirstAck = true;
+    bool _failWriteRequest1Delay = true;
+    std::atomic<int> _staleTransferType{MAV_MISSION_TYPE_ENUM_END};
+    std::atomic<int> _stalePartnerSystemId{0};
+    std::atomic<int> _stalePartnerComponentId{0};
+    std::atomic<bool> _dropNextCancel{false};
+    std::atomic<int> _cancelAckCount{0};
+    std::atomic<int> _missionCountCount{0};
 };
 

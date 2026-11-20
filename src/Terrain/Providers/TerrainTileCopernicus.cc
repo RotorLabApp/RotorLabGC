@@ -14,6 +14,9 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QJsonArray>
+#include <QtCore/QtNumeric>
+
+#include <cmath>
 
 QGC_LOGGING_CATEGORY(TerrainTileCopernicusLog, "qgc.terrain.terraintilecopernicus");
 
@@ -76,6 +79,22 @@ QJsonValue TerrainTileCopernicus::getJsonFromData(const QByteArray &input)
     return jsonData;
 }
 
+double TerrainTileCopernicus::heightFromJson(const QJsonValue &value)
+{
+    // QJsonValue::toDouble() turns null/undefined/strings into 0, which would read as 0 m of known ground
+    return value.isDouble() ? value.toDouble() : qQNaN();
+}
+
+int16_t TerrainTileCopernicus::toTileElevation(double height)
+{
+    // kUnknownElevation (INT16_MIN) is reserved, so the usable range is symmetric
+    constexpr double cMax = static_cast<double>(std::numeric_limits<int16_t>::max());
+    if (qIsNaN(height) || !std::isfinite(height) || (height > cMax) || (height < -cMax)) {
+        return kUnknownElevation;
+    }
+    return static_cast<int16_t>(std::lround(height));   // round to nearest, not truncate
+}
+
 QByteArray TerrainTileCopernicus::serializeFromData(const QByteArray &input)
 {
     const QJsonValue &jsonData = getJsonFromData(input);
@@ -121,8 +140,8 @@ QByteArray TerrainTileCopernicus::serializeFromData(const QByteArray &input)
     tileInfo.swLon = swArray[1].toDouble();
     tileInfo.neLat = neArray[0].toDouble();
     tileInfo.neLon = neArray[1].toDouble();
-    tileInfo.minElevation = static_cast<int16_t>(statsObject[_jsonMinElevationKey].toInt());
-    tileInfo.maxElevation = static_cast<int16_t>(statsObject[_jsonMaxElevationKey].toInt());
+    tileInfo.minElevation = toTileElevation(statsObject[_jsonMinElevationKey].toDouble());
+    tileInfo.maxElevation = toTileElevation(statsObject[_jsonMaxElevationKey].toDouble());
     tileInfo.avgElevation = statsObject[_jsonAvgElevationKey].toDouble();
     tileInfo.gridSizeLat = static_cast<int16_t>(carpetArray.count());
     tileInfo.gridSizeLon = static_cast<int16_t>(carpetArray[0].toArray().count());
@@ -148,7 +167,7 @@ QByteArray TerrainTileCopernicus::serializeFromData(const QByteArray &input)
         }
 
         for (qsizetype j = 0; j < static_cast<qsizetype>(tileInfo.gridSizeLon); j++) {
-            pTileData[valueIndex++] = static_cast<int16_t>(row[j].toDouble());
+            pTileData[valueIndex++] = toTileElevation(heightFromJson(row[j]));
         }
     }
 

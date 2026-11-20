@@ -27,6 +27,9 @@
 #ifdef QGC_QT_STREAMING
 #include "QtMultimediaReceiver.h"
 #endif
+#ifdef QGC_FFMPEG_STREAMING
+#include "FFmpegReceiver.h"
+#endif
 #include "SettingsManager.h"
 #include "VideoReceiver.h"
 
@@ -282,6 +285,9 @@ VideoReceiver *QGCCorePlugin::createVideoReceiver(QObject *parent)
 {
 #ifdef QGC_GST_STREAMING
     return GStreamer::createVideoReceiver(parent);
+#elif defined(QGC_FFMPEG_STREAMING)
+    // G88: GC's own receiver on Qt's FFmpeg when GStreamer is off
+    return FFmpegReceiver::createVideoReceiver(parent);
 #elif defined(QGC_QT_STREAMING)
     return QtMultimediaReceiver::createVideoReceiver(parent);
 #else
@@ -293,6 +299,8 @@ void *QGCCorePlugin::createVideoSink(QQuickItem *widget, QObject *parent)
 {
 #ifdef QGC_GST_STREAMING
     return GStreamer::createVideoSink(widget, parent);
+#elif defined(QGC_FFMPEG_STREAMING)
+    return FFmpegReceiver::createVideoSink(widget, parent);
 #elif defined(QGC_QT_STREAMING)
     return QtMultimediaReceiver::createVideoSink(widget, parent);
 #else
@@ -304,6 +312,8 @@ void QGCCorePlugin::releaseVideoSink(void *sink)
 {
 #ifdef QGC_GST_STREAMING
     GStreamer::releaseVideoSink(sink);
+#elif defined(QGC_FFMPEG_STREAMING)
+    FFmpegReceiver::releaseVideoSink(sink);
 #elif defined(QGC_QT_STREAMING)
     QtMultimediaReceiver::releaseVideoSink(sink);
 #else

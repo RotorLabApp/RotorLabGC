@@ -30,10 +30,19 @@
  *   Collection floods the link that carries control, so it never runs while
  *   anything is armed and is abandoned the instant something arms.
  *
+ *   ArduPilot answers LOG_REQUEST_LIST while armed with no LOG_ENTRY and the
+ *   STATUSTEXT "Disarm for log download". That is reported as an armed
+ *   failure, which callers do not count as an attempt.
+ *
+ *   The open log keeps growing for about 30 s after disarm. The log is listed,
+ *   listed again about 10 s later, and downloaded once its size holds still
+ *   (or after about 60 s, as listed). See LogCollectPolicy.
+ *
  ****************************************************************************/
 
 #pragma once
 
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QMetaObject>
 #include <QtCore/QObject>
 #include <QtCore/QSet>
@@ -68,21 +77,30 @@ public:
     /// Stop whatever is in progress. Emits failed().
     void cancel();
 
+    /// True when the active aircraft, or any other, reports armed or flying.
+    static bool anyAircraftArmed();
+
 signals:
     /// The file is on disk at `path`.
     void collected(const QString &path);
     /// It did not happen. `retryable` is false only when trying again cannot
     /// possibly help - the log is too big, or the aircraft has no such log.
-    void failed(const QString &why, bool retryable);
+    /// `armed` is true when nothing was learned because an aircraft was armed
+    /// (or the autopilot said "Disarm for log download"); callers wait for the
+    /// disarm instead of counting it as an attempt.
+    void failed(const QString &why, bool retryable, bool armed);
     void logMessage(const QString &line);
 
 private slots:
     void _onListChanged();
     void _onDownloadChanged();
     void _watchdog();
+    void _relist();
 
 private:
-    void _finish(const QString &path, const QString &why, bool retryable);
+    void _finish(const QString &path, const QString &why, bool retryable, bool armed = false);
+    void _reject(const QString &why, bool armed);
+    void _abort(const QString &why, bool armed);
     void _disconnectController();
     void _snapshot();
     QString _newFileInDir() const;
@@ -102,6 +120,17 @@ private:
     /// a second consumer living in the same object.
     QMetaObject::Connection _listConn;
     QMetaObject::Connection _dlConn;
+    QMetaObject::Connection _textConn;
+
+    /// The autopilot said "Disarm for log download" during this collection.
+    bool _armedRefusal = false;
+
+    /// The settle wait: the entry being watched and its size at the last
+    /// listing, timed from the first listing.
+    QTimer        _settleTimer;
+    QElapsedTimer _settleClock;
+    int           _pickId = -1;
+    qint64        _pickSize = -1;
 
     QTimer _watchdogTimer;
     int    _idleTicks = 0;

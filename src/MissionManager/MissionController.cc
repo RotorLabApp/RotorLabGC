@@ -30,6 +30,8 @@
 #include "TakeoffMissionItem.h"
 #include "PlanViewSettings.h"
 #include "MissionCommandTree.h"
+#include "ParameterManager.h"
+#include "Fact.h"
 #include "QGC.h"
 #include "QGCLoggingCategory.h"
 
@@ -1166,28 +1168,96 @@ double MissionController::_calcDistanceToHome(VisualMissionItem* currentItem, Vi
     return distanceOk ? homeCoord.distanceTo(currentCoord) : 0.0;
 }
 
-FlightPathSegment* MissionController::_createFlightPathSegmentWorker(VisualItemPair& pair, bool mavlinkTerrainFrame)
+namespace {
+
+/// What a leg between two items is: its segment type, whether a takeoff climbs straight up, and its ends.
+struct FlightPathSegmentSpec {
+    FlightPathSegment::SegmentType  segmentType;
+    bool                            takeoffStraightUp;
+    QGeoCoordinate                  coord1;
+    QGeoCoordinate                  coord2;
+    double                          coord1AMSLAlt;
+    double                          coord2AMSLAlt;
+    bool                            queryTerrainData;
+    FlightPathSegment::LaunchStart  launchStart;
+    VisualMissionItem*              launchTakeoff;      ///< A-11: the takeoff with no position whose height starts the leg
+    bool                            heightNotInPlan;    ///< A-10: the leg back to launch of an RTL
+
+    /// G76: a segment is reused only when it was built and wired for the same type, takeoff shape, launch start,
+    /// RTL leg and terrain query. Never 0, which marks a segment that was not wired for reuse
+    /// (FlightPathSegment::reuseKey).
+    quint32 reuseKey() const
+    {
+        return 1u | (static_cast<quint32>(segmentType) << 1) | (takeoffStraightUp ? (1u << 8) : 0u) | (queryTerrainData ? (1u << 9) : 0u)
+                  | (static_cast<quint32>(launchStart) << 10) | (heightNotInPlan ? (1u << 13) : 0u);
+    }
+};
+
+/// `launchTakeoff`: set for the leg from the planned home to the first item when the plan starts on the ground with
+/// a takeoff command that has no position of its own (ArduPilot multirotor takeoff). Contract CL-1a counts that
+/// climb as a takeoff leg, and A-11 draws the takeoff as a straight-up climb at launch to its own height: the leg
+/// starts at that height, and its first sample, the foot of the climb, is ground contact.
+/// `rtlLeg`: the leg back to the planned home after an RTL, flown at the aircraft's return height (A-10).
+FlightPathSegmentSpec flightPathSegmentSpec(const VisualItemPair& pair, bool mavlinkTerrainFrame, bool fixedWing, VisualMissionItem* launchTakeoff, bool rtlLeg, bool queryTerrainData)
 {
+    FlightPathSegmentSpec spec;
+    spec.queryTerrainData = queryTerrainData;
+
     // The takeoff goes straight up from ground to alt and then over to specified position at same alt. Which means
     // that coord 1 altitude is the same as coord altitude.
-    bool                takeoffStraightUp   = pair.second->isTakeoffItem() && !_controllerVehicle->fixedWing();
+    spec.takeoffStraightUp  = pair.second->isTakeoffItem() && !fixedWing;
+    spec.coord1             = pair.first->exitCoordinate();
+    spec.coord2             = pair.second->coordinate();
+    spec.coord2AMSLAlt      = pair.second->amslEntryAlt();
+    spec.coord1AMSLAlt      = spec.takeoffStraightUp ? spec.coord2AMSLAlt : pair.first->amslExitAlt();
+    spec.launchTakeoff      = nullptr;
+    spec.heightNotInPlan    = rtlLeg;
 
-    QGeoCoordinate      coord1              = pair.first->exitCoordinate();
-    QGeoCoordinate      coord2              = pair.second->coordinate();
-    double              coord2AMSLAlt       = pair.second->amslEntryAlt();
-    double              coord1AMSLAlt       = takeoffStraightUp ? coord2AMSLAlt : pair.first->amslExitAlt();
-
-    FlightPathSegment::SegmentType segmentType = mavlinkTerrainFrame ? FlightPathSegment::SegmentTypeTerrainFrame : FlightPathSegment::SegmentTypeGeneric;
+    spec.segmentType = mavlinkTerrainFrame ? FlightPathSegment::SegmentTypeTerrainFrame : FlightPathSegment::SegmentTypeGeneric;
     if (pair.second->isTakeoffItem()) {
-        segmentType = FlightPathSegment::SegmentTypeTakeoff;
+        spec.segmentType = FlightPathSegment::SegmentTypeTakeoff;
     } else if (pair.second->isLandCommand()) {
-        segmentType = FlightPathSegment::SegmentTypeLand;
+        spec.segmentType = FlightPathSegment::SegmentTypeLand;
+    } else if (launchTakeoff) {
+        spec.segmentType = FlightPathSegment::SegmentTypeTakeoff;
+        spec.launchTakeoff = launchTakeoff;
+        spec.coord1AMSLAlt = launchTakeoff->amslEntryAlt();
     }
 
-    FlightPathSegment* segment = new FlightPathSegment(segmentType, coord1, coord1AMSLAlt, coord2, coord2AMSLAlt, !_flyView /* queryTerrainData */,  this);
+    // G76: a takeoff leg out of the planned home that is not a straight-up climb starts on the ground at launch.
+    // A takeoff with no position climbs straight up at launch (A-11) and the leg starts at its height.
+    spec.launchStart = FlightPathSegment::LaunchStartNone;
+    if (spec.segmentType == FlightPathSegment::SegmentTypeTakeoff && !spec.takeoffStraightUp &&
+            qobject_cast<MissionSettingsItem*>(pair.first) != nullptr) {
+        spec.launchStart = spec.launchTakeoff ? FlightPathSegment::LaunchStartClimbAtLaunch : FlightPathSegment::LaunchStartOnGround;
+    }
+    return spec;
+}
+
+} // namespace
+
+bool MissionController::_queryLegTerrain(void) const
+{
+    // G76: the 2 m strike margin is for aircraft. A rover, boat or submarine runs on or below the surface, so
+    // its legs are not checked against the terrain and keep the trajectory color (as the Fly view does).
+    return !_flyView && !_controllerVehicle->rover() && !_controllerVehicle->sub();
+}
+
+FlightPathSegment* MissionController::_createFlightPathSegmentWorker(VisualItemPair& pair, bool mavlinkTerrainFrame, VisualMissionItem* launchTakeoff, bool rtlLeg)
+{
+    const FlightPathSegmentSpec spec            = flightPathSegmentSpec(pair, mavlinkTerrainFrame, _controllerVehicle->fixedWing(), launchTakeoff, rtlLeg, _queryLegTerrain());
+    const bool                  takeoffStraightUp = spec.takeoffStraightUp;
+
+    FlightPathSegment* segment = new FlightPathSegment(spec.segmentType, spec.coord1, spec.coord1AMSLAlt, spec.coord2, spec.coord2AMSLAlt, spec.queryTerrainData,  this);
+    segment->setReuseKey(pair.first, pair.second, spec.reuseKey(), spec.launchTakeoff);
+    segment->setLaunchStart(spec.launchStart);
+    segment->setHeightNotInPlan(spec.heightNotInPlan);
 
     if (takeoffStraightUp) {
         connect(pair.second, &VisualMissionItem::amslEntryAltChanged, segment, &FlightPathSegment::setCoord1AMSLAlt);
+    } else if (spec.launchTakeoff) {
+        // A-11: the leg starts at the top of the takeoff's climb at launch
+        connect(spec.launchTakeoff, &VisualMissionItem::amslEntryAltChanged, segment, &FlightPathSegment::setCoord1AMSLAlt);
     } else {
         connect(pair.first, &VisualMissionItem::amslExitAltChanged, segment, &FlightPathSegment::setCoord1AMSLAlt);
     }
@@ -1202,19 +1272,31 @@ FlightPathSegment* MissionController::_createFlightPathSegmentWorker(VisualItemP
     connect(segment,    &FlightPathSegment::coord2AMSLAltChanged,       this,       &MissionController::_recalcMissionFlightStatusSignal, Qt::QueuedConnection);
     connect(segment,    &FlightPathSegment::amslTerrainHeightsChanged,  this,       &MissionController::recalcTerrainProfile,             Qt::QueuedConnection);
     connect(segment,    &FlightPathSegment::terrainCollisionChanged,    this,       &MissionController::recalcTerrainProfile,             Qt::QueuedConnection);
+    connect(segment,    &FlightPathSegment::terrainStateChanged,        this,       &MissionController::recalcTerrainProfile,             Qt::QueuedConnection);
 
     return segment;
 }
 
-FlightPathSegment* MissionController::_addFlightPathSegment(FlightPathSegmentHashTable& prevItemPairHashTable, VisualItemPair& pair, bool mavlinkTerrainFrame)
+FlightPathSegment* MissionController::_addFlightPathSegment(FlightPathSegmentHashTable& prevItemPairHashTable, VisualItemPair& pair, bool mavlinkTerrainFrame, VisualMissionItem* launchTakeoff, bool rtlLeg)
 {
     FlightPathSegment* segment = nullptr;
 
-    if (prevItemPairHashTable.contains(pair) && (prevItemPairHashTable[pair]->segmentType() == FlightPathSegment::SegmentTypeTerrainFrame) != mavlinkTerrainFrame) {
+    // G76: the test was inverted (it reused a segment only when its terrain frame type had changed), so every
+    // unchanged leg was rebuilt and a leg switched to or from terrain frame kept its old type. A segment is now
+    // reused only when it was wired for the same type and takeoff shape; anything else is rebuilt.
+    const FlightPathSegmentSpec spec = flightPathSegmentSpec(pair, mavlinkTerrainFrame, _controllerVehicle->fixedWing(), launchTakeoff, rtlLeg, _queryLegTerrain());
+    if (prevItemPairHashTable.contains(pair) && prevItemPairHashTable[pair]->reusableFor(pair.first, pair.second, spec.reuseKey(), spec.launchTakeoff)) {
         // Pair already exists and connected, just re-use
         _flightPathSegmentHashTable[pair] = segment = prevItemPairHashTable.take(pair);
+        // The signals keep the ends current; set them again so nothing depends on every change having been signaled
+        segment->setCoordinate1(spec.coord1);
+        segment->setCoordinate2(spec.coord2);
+        segment->setCoord1AMSLAlt(spec.coord1AMSLAlt);
+        segment->setCoord2AMSLAlt(spec.coord2AMSLAlt);
+        segment->setLaunchStart(spec.launchStart);
+        segment->setHeightNotInPlan(spec.heightNotInPlan);
     } else {
-        segment = _createFlightPathSegmentWorker(pair, mavlinkTerrainFrame);
+        segment = _createFlightPathSegmentWorker(pair, mavlinkTerrainFrame, launchTakeoff, rtlLeg);
         _flightPathSegmentHashTable[pair] = segment;
     }
 
@@ -1264,6 +1346,7 @@ void MissionController::_recalcFlightPathSegments(void)
     VisualMissionItem*  lastFlyThroughVI =          qobject_cast<VisualMissionItem*>(_visualItems->get(0));
     bool                linkEndToHome =             false;
     bool                linkStartToHome =           _controllerVehicle->rover() ? true : false;
+    VisualMissionItem*  launchTakeoff =             nullptr;    // G76: a takeoff with no position comes before the first item with a position
     bool                foundRTL =                  false;
     bool                homePositionValid =         _settingsItem->coordinate().isValid();
     bool                roiActive =                 false;
@@ -1327,6 +1410,7 @@ void MissionController::_recalcFlightPathSegments(void)
                     // Link the first item back to home to show that.
                     if (firstCoordinateNotFound) {
                         linkStartToHome = true;
+                        launchTakeoff = visualItem;
                     }
                 }
                 break;
@@ -1381,7 +1465,10 @@ void MissionController::_recalcFlightPathSegments(void)
                     lastSegmentVisualItemPair =  VisualItemPair(lastFlyThroughVI, visualItem);
                     SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(lastFlyThroughVI);
                     bool mavlinkTerrainFrame = simpleItem ? simpleItem->missionItem().frame() == MAV_FRAME_GLOBAL_TERRAIN_ALT : false;
-                    FlightPathSegment* segment = _addFlightPathSegment(oldSegmentTable, lastSegmentVisualItemPair, mavlinkTerrainFrame);
+                    // G76 (CL-1a, A-11): with a takeoff that has no position (ArduPilot multirotor), the leg from home
+                    // to the first item follows the takeoff's straight-up climb at launch
+                    VisualMissionItem* legLaunchTakeoff = (lastFlyThroughVI == _settingsItem) ? launchTakeoff : nullptr;
+                    FlightPathSegment* segment = _addFlightPathSegment(oldSegmentTable, lastSegmentVisualItemPair, mavlinkTerrainFrame, legLaunchTakeoff);
                     segment->setSpecialVisual(roiActive);
                     if (addDirectionArrow) {
                         _directionArrows.append(segment);
@@ -1401,7 +1488,10 @@ void MissionController::_recalcFlightPathSegments(void)
 
     if (linkEndToHome && lastFlyThroughVI != _settingsItem && homePositionValid) {
         lastSegmentVisualItemPair = VisualItemPair(lastFlyThroughVI, _settingsItem);
-        FlightPathSegment* segment = _addFlightPathSegment(oldSegmentTable, lastSegmentVisualItemPair, false /* mavlinkTerrainFrame */);
+        // G76 (A-10, CL-2): the RTL leg is flown at the aircraft's own return height, which is not in the plan, so
+        // it is unknown (violet, dashed), as in the 3D view; before, it was checked as a descent to home and drawn
+        // red near launch
+        FlightPathSegment* segment = _addFlightPathSegment(oldSegmentTable, lastSegmentVisualItemPair, false /* mavlinkTerrainFrame */, nullptr, true /* rtlLeg */);
         segment->setSpecialVisual(roiActive);
         lastFlyThroughVI->setSimpleFlighPathSegment(segment);
     }
@@ -1782,21 +1872,19 @@ void MissionController::_recalcMissionFlightStatus()
 
         if (item->specifiesCoordinate()) {
             double amslAlt = item->amslEntryAlt();
+            double terrainAltitude = item->terrainAltitude();
             if (altRange == 0.0) {
                 item->setAltPercent(0.0);
                 item->setTerrainPercent(qQNaN());
-                item->setTerrainCollision(false);
             } else {
                 item->setAltPercent((amslAlt - _minAMSLAltitude) / altRange);
-                double terrainAltitude = item->terrainAltitude();
-                if (qIsNaN(terrainAltitude)) {
-                    item->setTerrainPercent(qQNaN());
-                    item->setTerrainCollision(false);
-                } else {
-                    item->setTerrainPercent((terrainAltitude - _minAMSLAltitude) / altRange);
-                    item->setTerrainCollision(amslAlt < terrainAltitude);
-                }
+                item->setTerrainPercent(qIsNaN(terrainAltitude) ? qQNaN() : (terrainAltitude - _minAMSLAltitude) / altRange);
             }
+            // G76 (contract A-9 and CL-1a): the item's own point is a strike when it is less than 2 m above the
+            // loaded ground or below it, the same margin as its legs. A takeoff or landing point may touch the
+            // ground (down to 0.5 m below it) without being a strike. Unknown ground is never a strike.
+            const bool takeoffOrLand = item->isTakeoffItem() || item->isLandCommand();
+            item->setTerrainCollision(FlightPathSegment::itemTerrainState(amslAlt, terrainAltitude, takeoffOrLand) == FlightPathSegment::TerrainStrike);
         }
     }
 
@@ -1975,6 +2063,8 @@ void MissionController::_initVisualItem(VisualMissionItem* visualItem)
         SimpleMissionItem* simpleItem = qobject_cast<SimpleMissionItem*>(visualItem);
         if (simpleItem) {
             connect(&simpleItem->missionItem()._commandFact, &Fact::valueChanged, this, &MissionController::_itemCommandChanged);
+            // G76: the leg out of an item follows the terrain in terrain frame, so a frame change rebuilds the legs
+            connect(&simpleItem->missionItem()._frameFact, &Fact::valueChanged, this, &MissionController::_recalcFlightPathSegmentsSignal);
         } else {
             qWarning() << "isSimpleItem == true, yet not SimpleMissionItem";
         }
@@ -2704,10 +2794,36 @@ MissionController::SendToVehiclePreCheckState MissionController::sendToVehiclePr
     if (_managerVehicle->armed() && _managerVehicle->flightMode() == _managerVehicle->missionFlightMode()) {
         return SendToVehiclePreCheckStateActiveMission;
     }
-    if (_controllerVehicle->firmwareType() != _managerVehicle->firmwareType() || QGCMAVLink::vehicleClass(_controllerVehicle->vehicleType()) != QGCMAVLink::vehicleClass(_managerVehicle->vehicleType())) {
+    // An ArduPlane QuadPlane reports MAV_TYPE_FIXED_WING in its heartbeat unless Q_MAV_TYPE is set, so the vehicle class
+    // alone does not say whether it can fly a VTOL Plan. Q_ENABLE > 0 means the QuadPlane code is active.
+    bool vehicleIsVtolCapable = _managerVehicle->vtol();
+    if (!vehicleIsVtolCapable && _managerVehicle->apmFirmware() && QGCMAVLink::isFixedWing(_managerVehicle->vehicleType())) {
+        static const QString qEnableParam = QStringLiteral("Q_ENABLE");
+        ParameterManager* const paramMgr = _managerVehicle->parameterManager();
+        if (paramMgr && paramMgr->parameterExists(ParameterManager::defaultComponentId, qEnableParam)) {
+            vehicleIsVtolCapable = paramMgr->getParameter(ParameterManager::defaultComponentId, qEnableParam)->rawValue().toInt() > 0;
+        }
+    }
+    if (_controllerVehicle->firmwareType() != _managerVehicle->firmwareType() ||
+            !planVehicleClassMatches(_controllerVehicle->vehicleType(), _managerVehicle->vehicleType(), vehicleIsVtolCapable)) {
         return SendToVehiclePreCheckStateFirwmareVehicleMismatch;
     }
     return SendToVehiclePreCheckStateOk;
+}
+
+bool MissionController::planVehicleClassMatches(MAV_TYPE planVehicleType, MAV_TYPE vehicleType, bool vehicleIsVtolCapable)
+{
+    const QGCMAVLink::VehicleClass_t planClass = QGCMAVLink::vehicleClass(planVehicleType);
+    const QGCMAVLink::VehicleClass_t vehicleClass = QGCMAVLink::vehicleClass(vehicleType);
+    if (planClass == vehicleClass) {
+        return true;
+    }
+    // A VTOL Plan on a fixed wing vehicle that is VTOL capable (ArduPlane QuadPlane) is a match.
+    // Any other class difference (for example a multi-rotor Plan on a plane) is still a mismatch.
+    if (planClass == QGCMAVLink::VehicleClassVTOL && vehicleClass == QGCMAVLink::VehicleClassFixedWing && vehicleIsVtolCapable) {
+        return true;
+    }
+    return false;
 }
 
 QGroundControlQmlGlobal::AltMode MissionController::globalAltitudeMode(void)

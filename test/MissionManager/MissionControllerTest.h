@@ -31,7 +31,15 @@ private slots:
     void _testEmptyVehiclePX4           (void);
     void _testGlobalAltMode             (void);
     void _testGimbalRecalc              (void);
+    void _testGimbalRecalcSlowEventLoop (void);
     void _testVehicleYawRecalc          (void);
+    void _testFlightPathSegmentReuse    (void);     // G76
+    void _testFlightPathSegmentFrameSwitch (void);  // G76
+    void _testFlightPathSegmentCommandSwitch (void); // G76
+    void _testFlightPathSegmentLaunchClimb (void);  // G76
+    void _testFlightPathSegmentRtlLeg   (void);     // G76
+    void _testLoadedItemQueriesTerrain  (void);     // G76
+    void _testTerrainProfileSeries      (void);     // G76
 
 private:
 #if 0
@@ -47,6 +55,7 @@ private:
     void _testOfflineToOnlineWorker(MAV_AUTOPILOT firmwareType);
 #endif
     void _setupVisualItemSignals(VisualMissionItem* visualItem);
+    bool _gimbalYawPropagated(int yawIndex, double expectedYaw);
 
     // MissiomItems signals
 

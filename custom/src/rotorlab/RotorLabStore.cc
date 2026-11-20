@@ -65,9 +65,15 @@ void writeValue(const char *key, const QVariant &value)
 bool    RotorLabStore::enabled()                 { return readValue(kEnabled, false).toBool(); }
 void    RotorLabStore::setEnabled(bool on)       { writeValue(kEnabled, on); }
 
+#if defined(RLGC_STABLE_BUILD) && defined(QGC_DAILY_BUILD)
+#error "QGC_DAILY_BUILD in a stable build would let ROTORLAB_BASE_URL redirect GC"
+#endif
+
 QString RotorLabStore::baseUrl()
 {
 #ifdef QGC_DAILY_BUILD
+    // Test-key hook: see license/LicenseRecord.cc pinnedKeys(); the release
+    // scripts check that a stable binary does not contain ROTORLAB_BASE_URL.
     // Development builds only, so the connector can be exercised against a
     // local RotorLab. This whole branch is compiled out of a stable build:
     // a released ground station has exactly one address it can talk to, and

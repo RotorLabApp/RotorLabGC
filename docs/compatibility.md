@@ -4,6 +4,8 @@
 
 ## Platforms
 
+RotorLab GC 5.4.0, like 5.3.0, is published for Windows 10 and 11 (x64), Android on arm64-v8a, and Linux x86_64 as an AppImage built on Ubuntu 22.04, which needs glibc 2.35 or later (Ubuntu 22.04 or later, or another distribution of that age). Its signed offline activation needs RotorLab 3.7.0 or later. The table below is for 5.1.1.
+
 | Platform | RotorLab GC 5.1.1 |
 |---|---|
 | Windows 11 (x64) | Tested with. The release was built and its test suites run on Windows 11 (121 passed, 0 failed, 5 skipped), and the signed installer and checksums were verified there. |
@@ -55,4 +57,3 @@ The [ATAK and TAK Field Guide](https://github.com/RotorLabApp/rotorlab-gc-tak-gu
 | CMake | 3.25 or later, with Ninja |
 | Windows compiler | Visual Studio 2022 |
 | Android | NDK 26.1.10909125, JDK 17 |
-| Video | Qt Multimedia. GStreamer is not built into the released installer or APK. |

@@ -270,8 +270,16 @@ QString UrlFactory::providerTypeFromHash(int hash)
 // This seems to limit provider name length to less than ~25 chars due to downcasting to int
 int UrlFactory::hashFromProviderType(QStringView type)
 {
-    const auto hash = qHash(type) >> 1;
-    return static_cast<int>(hash);
+    // Copernicus tiles are keyed with a cache version, see CopernicusElevationProvider::kTileCacheVersion
+    if (type == QLatin1String(CopernicusElevationProvider::kProviderKey)) {
+        return static_cast<int>(qHash(QString(type) + QLatin1String(CopernicusElevationProvider::kTileCacheVersion)) >> 1);
+    }
+    return legacyHashFromProviderType(type);
+}
+
+int UrlFactory::legacyHashFromProviderType(QStringView type)
+{
+    return static_cast<int>(qHash(type) >> 1);
 }
 
 QString UrlFactory::tileHashToType(QStringView tileHash)

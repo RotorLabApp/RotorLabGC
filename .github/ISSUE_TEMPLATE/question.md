@@ -23,8 +23,8 @@ For ATAK and TAK, see https://github.com/RotorLabApp/rotorlab-gc-tak-guide.
 
 **Setup (if it matters for the question)**
 
-- GC version (for example 5.1.1):
-- Platform (Windows 10 or 11, or Android device and version):
+- GC version (for example 5.4.0):
+- Platform (Windows 10 or 11, Android device and version, or Linux distribution and version):
 - Autopilot and aircraft (for example ArduPilot Copter 4.5, PX4 1.15, or SITL):
 - RotorLab Connector on or off, and TAK in use or not:
 

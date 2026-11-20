@@ -72,7 +72,7 @@ bool TerrainTileManager::getAltitudesForCoordinates(const QList<QGeoCoordinate> 
             const double elevation = tile->elevation(coordinate);
             if (qIsNaN(elevation)) {
                 error = true;
-                qCWarning(TerrainTileManagerLog) << Q_FUNC_INFO << "Internal Error: missing elevation in tile cache";
+                qCDebug(TerrainTileManagerLog) << Q_FUNC_INFO << "no elevation known for" << coordinate << "(data void or outside tile)";
             } else {
                 qCDebug(TerrainTileManagerLog) << Q_FUNC_INFO << "returning elevation from tile cache" << elevation;
             }

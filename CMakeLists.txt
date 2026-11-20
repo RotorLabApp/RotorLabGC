@@ -285,6 +285,12 @@ else()
     list(APPEND QGC_RESOURCES ${CMAKE_SOURCE_DIR}/src/UTMSP/dummy/utmsp_dummy.qrc)
 endif()
 
+# RotorLab G87: the old Viewer3D QML, meshes, shaders and settings metadata are
+# only packed when QGC_VIEWER3D is on (never in GC builds).
+if(QGC_VIEWER3D)
+    list(APPEND QGC_RESOURCES ${CMAKE_SOURCE_DIR}/qgcviewer3d.qrc)
+endif()
+
 if(QGC_BUILD_TESTING)
     list(APPEND QGC_RESOURCES ${CMAKE_SOURCE_DIR}/test/UnitTest.qrc)
 endif()

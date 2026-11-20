@@ -3025,6 +3025,39 @@ void Vehicle::requestMessage(RequestMessageResultHandler resultHandler, void* re
                           param1, param2, param3, param4, param5, 0);
 }
 
+void Vehicle::cancelPendingHandlers(const void* handlerData)
+{
+    if (!handlerData) {
+        return;
+    }
+
+    // Walk the list backwards since we remove entries
+    for (int i=_mavCommandList.count()-1; i>=0; i--) {
+        const MavCmdAckHandlerInfo_t& handlerInfo = _mavCommandList[i].ackHandlerInfo;
+        bool cancel = handlerInfo.resultHandlerData == handlerData || handlerInfo.progressHandlerData == handlerData;
+        if (!cancel && handlerInfo.resultHandler == _requestMessageCmdResultHandler) {
+            cancel = static_cast<const RequestMessageInfo_t*>(handlerInfo.resultHandlerData)->resultHandlerData == handlerData;
+        }
+        if (cancel) {
+            qCDebug(VehicleLog) << Q_FUNC_INFO << "compId:command" << _mavCommandList[i].targetCompId << _mavCommandList[i].command;
+            _mavCommandList.removeAt(i);
+        }
+    }
+
+    // Request message infos may also be waiting on the message after the command was acked
+    QList<QPair<int, int>> compIdMsgIdList;
+    for (const auto& compIdEntry : std::as_const(_requestMessageInfoMap)) {
+        for (const RequestMessageInfo_t* requestMessageInfo : compIdEntry) {
+            if (requestMessageInfo->resultHandlerData == handlerData) {
+                compIdMsgIdList.append(qMakePair(requestMessageInfo->compId, requestMessageInfo->msgId));
+            }
+        }
+    }
+    for (const auto& compIdMsgId : std::as_const(compIdMsgIdList)) {
+        _removeRequestMessageInfo(compIdMsgId.first, compIdMsgId.second);
+    }
+}
+
 void Vehicle::setPrearmError(const QString& prearmError)
 {
     _prearmError = prearmError;

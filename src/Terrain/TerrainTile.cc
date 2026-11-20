@@ -99,6 +99,11 @@ double TerrainTile::elevation(const QGeoCoordinate &coordinate) const
     }
 
     const int16_t elevation = _elevationData[latIndex][lonIndex];
+    if (elevation == kUnknownElevation) {
+        // Unknown ground height: report NaN so callers never mistake it for 0 m
+        return qQNaN();
+    }
+
     if (elevation < _tileInfo.minElevation) {
         qCWarning(TerrainTileLog) << this << "Warning: elevation read is below min elevation in tile:" << elevation << "<" << _tileInfo.minElevation;
     } else if (elevation > _tileInfo.maxElevation) {

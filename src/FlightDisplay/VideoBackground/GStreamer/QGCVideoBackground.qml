@@ -7,9 +7,12 @@
  *
  ****************************************************************************/
 
-import QtQuick
-import QtQuick.Controls
+// The Fly view's video item when GStreamer is built (src/FlightDisplay/CMakeLists.txt picks
+// this file or VideoOutput/QGCVideoBackground.qml).
 
-FlightDisplayViewGStreamer {
+import QtQuick
+import org.freedesktop.gstreamer.Qt6GLVideoItem
+
+GstGLQt6VideoItem {
     id: videoBackground
 }

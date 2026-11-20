@@ -51,7 +51,7 @@ On Windows these live in GC's data folder under `%APPDATA%\RotorLab`. Anyone wit
 
 ## How RotorLab's features stay out of the way of flying
 
-- GC records and warns. It never authorizes a flight, and nothing in RotorLab's features holds up arming, a launch or video.
+- GC records and warns. It never authorizes a flight, and nothing in RotorLab's features holds up arming or a launch.
 - GC does not download a flight log while any aircraft is armed, and a Fleet Server log download stops at once if the aircraft arms.
 - Every ATAK command verb starts off, behind three switches that all start off, and "Send commands only from listed senders" starts on. See the [ATAK and TAK Field Guide](https://github.com/RotorLabApp/rotorlab-gc-tak-guide), chapter 5.
 - A license re-check while GC is running never closes it or interrupts a flight.

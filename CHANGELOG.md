@@ -2,6 +2,35 @@
 
 RotorLab GC is built on QGroundControl. RotorLab's releases come first; the history inherited from upstream QGroundControl follows, unchanged, under [Upstream QGroundControl history](#upstream-qgroundcontrol-history).
 
+## [RotorLab GC] 5.4.0
+
+RotorLab GC is a modified version of QGroundControl. Changes since 5.3.0:
+
+- **Before you upgrade a TAK / ATAK station**: after the upgrade, a station reads no commands from ATAK markers, and "Commands to aircraft on" cannot be turned on, until its TAK callsign prefix is set or confirmed on the TAK / OpenTAKServer page. ROTOR, the shared default in earlier versions, can no longer be a prefix: a station that used it is offered its own prefix, made from "RL" and four characters of its station ID. Markers must now name the station and the aircraft, so markers such as `GOTO 2`, `HOLD 1` or `RTL ALL` no longer reach any aircraft. SEL is refused. Station position sharing to the TAK server is now off by default.
+- **TAK / ATAK commands name their station**: a marker names the aircraft as this station publishes it to TAK, for example `HOLD ALPHA-1`, `ALPHA-1,3`, `ALPHA-ALL` or the aircraft's Fleet callsign. A marker that names no station, names SEL, names a station or aircraft not seen on the TAK server, or names this station but no aircraft, is not sent to any aircraft, and the Remote commands list shows why. GOTO still reaches one aircraft only. Changing the prefix turns "Commands to aircraft on" off. When another station on the TAK server uses the same prefix, this station sends no ATAK commands to any aircraft until about 2 minutes after the other station is last seen. Addressing is routing, not authentication: the name in a marker chooses which station reads it, does not show who placed it, and anyone who can post to the TAK server can write any name. ATAK operators never see a refusal, duplicate-prefix detection is best effort, and addressing applies only between stations on 5.4.0 or later. Give each station its own prefix.
+- **TAK / ATAK station position**: new setting "Share this station's position with the TAK server" on the GCS location card, off by default for new and upgraded installs. With it off, the station still announces itself to the TAK server, with no location.
+- **Plan view**: legs on the 2D map are drawn in the same terrain colors as the 3D view, with tick marks on red parts and dashes on violet parts, and the terrain profile shows the same colors and the number of legs in each state. Legs that use terrain-relative altitude are now checked in 2D. Obstacles, buildings and wires are not checked.
+- **Network video**: GC shows network video again, with its own video receiver: H.264 and H.265 over UDP (RTP), RTSP, and MPEG-TS over UDP or TCP, on Windows, Android and Linux.
+- **Video recording**: a new "Video recording and relay" settings page records the main video stream to this computer as received: Off, While armed (the default) or Always while video is received. When this station is enrolled with a Fleet Server, GC can upload each recording to it; the recording stays on this computer.
+- **Live video to the Fleet Server**: when this station is enrolled with a Fleet Server, GC can send the live video to it for viewing in the server's console, at Full, Medium or Low quality (Medium and Low on Windows and Android with a suitable video encoder; Linux sends Full only).
+- **License notices**: the Windows installer, the Android app and the Linux AppImage each list every library they include in NOTICE, with its version and license, and include each library's license file. The Linux AppImage now lists the Ubuntu 22.04 libraries, ICU 73 and the Qt libraries it carries, with each Ubuntu library's copyright file. The Windows install folder and the AppImage no longer include files used only to build software.
+- **Fixes**: fixed a crash that could happen when a vehicle was removed while GC was still waiting for its camera to answer a request for camera information.
+- **Known limit**: text added by RotorLab GC appears in English in every language setting.
+
+## [RotorLab GC] 5.3.0
+
+RotorLab GC is a modified version of QGroundControl. Changes since 5.1.1:
+
+- **3D view of the plan**: in Plan view, the 3D button shows the plan over the terrain, and you can edit it there (move a point, change its height, and on supported vehicles set spline legs, heading and gimbal pitch). Colors show what GC's terrain data says about each leg; obstacles, buildings and wires are not checked. Windows and Linux only. The old Fly view 3D viewer is removed.
+- **Linux**: a Linux x86_64 AppImage, for Ubuntu 22.04 or later, or another distribution with glibc 2.35 or later.
+- **Signed offline activation**: GC opens without a connection only with an activation that RotorLab signed, checked against a RotorLab public key built into GC (RotorLab 3.7.0 or later). The License page shows the date until which GC can open without a connection. After upgrading from 5.1.1, start GC once with internet: until this device is activated, GC does not connect to vehicles. Once GC is open, the license gate never closes it or covers the screen while a vehicle is connected.
+- **Offline terrain heights**: terrain heights saved for offline use by earlier versions are removed, because some were wrong. Open each offline area while online and select Resume Download. Saved map imagery is not affected.
+- **Mission planning**: more reliable plan uploads to PX4, structure scans that ArduPilot accepts, a read-only breach return height with a note on how your autopilot uses it, terrain-based altitudes kept as saved, and clearer messages for plan files GC cannot open.
+- **TAK / ATAK**: commands are read only from markers that the sending device reports as placed by a person (GC cannot verify this); GOTO needs a valid target and one aircraft; signed altitude and speed values (such as ALT -50 or ALT +150) are refused; TKOFF does not arm while ARM is off; a marker is never run twice; the Fly view shows when command markers were not sent to the aircraft; the TAK password is kept in the system key store.
+- **Stored keys**: the Device Key is never saved in the settings file. On Windows, the Credential Manager entries are named "RotorLab GC - <account>". On Linux without a desktop keyring, the Device Key is kept for the session only.
+- **Vehicle Setup**: the setup pages use the same page frame as the Application Settings pages.
+- **Known limit**: text added by RotorLab GC appears in English in every language setting.
+
 ## [RotorLab GC] 5.1.1
 
 RotorLab GC is a modified version of QGroundControl. Changes in this release:

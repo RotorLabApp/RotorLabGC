@@ -8,6 +8,7 @@
 
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QFile>
+#include <QtCore/QIODevice>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QTimer>
 #include <QtCore/QUrl>
@@ -38,6 +39,7 @@ namespace {
 
 /// The property a pin check leaves on a reply it stopped.
 constexpr char kPinRefused[] = "rlPinRefused";
+constexpr char kBodySent[] = "rlBodySent";
 
 /// Read the DER tag and length at `pos`. `hdr` is the size of tag plus
 /// length octets, `len` the content size. False when it runs off the end.
@@ -63,6 +65,60 @@ bool derItem(const QByteArray &d, qsizetype pos, quint8 &tag, qsizetype &hdr, qs
         hdr += n;
     }
     return len >= 0 && pos + hdr + len <= d.size();
+}
+
+/// A read-only window [offset, offset + length) on a file, for putRange().
+/// Reads go straight to the file at the right position; nothing is buffered
+/// beyond what QNetworkAccessManager asks for.
+class FileRangeDevice : public QIODevice
+{
+public:
+    FileRangeDevice(const QString &path, qint64 offset, qint64 length)
+        : QIODevice(nullptr), _file(path), _offset(offset), _length(length) {}
+
+    bool openRange(QString *error)
+    {
+        // ReadOnly and nothing else: Text would translate newlines.
+        if (!_file.open(QIODevice::ReadOnly)) {
+            *error = _file.errorString();
+            return false;
+        }
+        if (_offset < 0 || _length < 0 || _offset + _length > _file.size()) {
+            *error = QStringLiteral("the range is outside the file");
+            return false;
+        }
+        return QIODevice::open(QIODevice::ReadOnly);
+    }
+
+    bool isSequential() const override { return false; }
+    qint64 size() const override { return _length; }
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) override
+    {
+        const qint64 at = pos();
+        const qint64 n = qMin(maxSize, _length - at);
+        if (n <= 0) {
+            return n < 0 ? -1 : 0;
+        }
+        if (!_file.seek(_offset + at)) {
+            return -1;
+        }
+        return _file.read(data, n);
+    }
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    QFile _file;
+    const qint64 _offset;
+    const qint64 _length;
+};
+
+/// Request headers a caller may not set through postBytes()/putBytes().
+bool reservedHeader(const QByteArray &name)
+{
+    const QByteArray n = name.trimmed().toLower();
+    return n == "authorization" || n == "content-length" || n == "host";
 }
 
 } // namespace
@@ -215,6 +271,11 @@ void HttpClient::put(const QString &path, const QJsonObject &body, Handler done,
     _send(QStringLiteral("PUT"), path, &body, true, std::move(done), timeoutMs);
 }
 
+void HttpClient::patchJson(const QString &path, const QJsonObject &body, Handler done, int timeoutMs)
+{
+    _send(QStringLiteral("PATCH"), path, &body, true, std::move(done), timeoutMs);
+}
+
 void HttpClient::postUnauthenticated(const QString &path, const QJsonObject &body,
                                      Handler done, int timeoutMs)
 {
@@ -338,6 +399,11 @@ void HttpClient::_send(const QString &verb, const QString &path, const QJsonObje
             ? QJsonDocument(*body).toJson(QJsonDocument::Compact)
             : QByteArrayLiteral("{}");
         reply = _nam->put(req, payload);
+    } else if (verb == QLatin1String("PATCH")) {
+        const QByteArray payload = body
+            ? QJsonDocument(*body).toJson(QJsonDocument::Compact)
+            : QByteArrayLiteral("{}");
+        reply = _nam->sendCustomRequest(req, QByteArrayLiteral("PATCH"), payload);
     } else {
         const QByteArray payload = body
             ? QJsonDocument(*body).toJson(QJsonDocument::Compact)
@@ -354,6 +420,13 @@ void HttpClient::_send(const QString &verb, const QString &path, const QJsonObje
     // A wall-clock timeout, longer than any long-poll wait carried in the path,
     // or every poll looks like a broken server. Uploads use an idle timeout
     // instead - see postFile().
+    _armDeadline(reply, timeoutMs);
+
+    _wire(reply, std::move(done));
+}
+
+void HttpClient::_armDeadline(QNetworkReply *reply, int timeoutMs)
+{
     auto *timer = new QTimer(reply);
     timer->setSingleShot(true);
     timer->setInterval(timeoutMs);
@@ -363,13 +436,149 @@ void HttpClient::_send(const QString &verb, const QString &path, const QJsonObje
         }
     });
     timer->start();
+}
 
+void HttpClient::postBytes(const QString &path, const QByteArray &body, const QByteArray &contentType,
+                           const Headers &extraHeaders, Handler done, int timeoutMs)
+{
+    _sendRaw(QStringLiteral("POST"), path, body, contentType, extraHeaders, std::move(done), timeoutMs);
+}
+
+void HttpClient::putBytes(const QString &path, const QByteArray &body, const QByteArray &contentType,
+                          const Headers &extraHeaders, Handler done, int timeoutMs)
+{
+    _sendRaw(QStringLiteral("PUT"), path, body, contentType, extraHeaders, std::move(done), timeoutMs);
+}
+
+void HttpClient::deleteResource(const QString &path, Handler done, int timeoutMs)
+{
+    _sendRaw(QStringLiteral("DELETE"), path, {}, {}, {}, std::move(done), timeoutMs);
+}
+
+void HttpClient::abortAll()
+{
+    ++_generation;                  // the handlers of these replies never run
+    const QList<QPointer<QNetworkReply>> replies = _inFlight;
+    _inFlight.clear();
+    for (const QPointer<QNetworkReply> &r : replies) {
+        if (r && r->isRunning()) {
+            r->abort();
+        }
+    }
+}
+
+void HttpClient::head(const QString &path, Handler done, int timeoutMs)
+{
+    _sendRaw(QStringLiteral("HEAD"), path, {}, {}, {}, std::move(done), timeoutMs);
+}
+
+void HttpClient::_sendRaw(const QString &verb, const QString &path, const QByteArray &body,
+                          const QByteArray &contentType, const Headers &extraHeaders,
+                          Handler done, int timeoutMs)
+{
+    HttpReply fail;
+    if (_baseUrl.isEmpty()) {
+        fail.error = QStringLiteral("no server address configured");
+        if (done) done(fail);
+        return;
+    }
+    if (_pinNeedsTls(fail)) {
+        if (done) done(fail);
+        return;
+    }
+
+    QNetworkRequest req = _request(path, true);
+    for (const auto &h : extraHeaders) {
+        if (!reservedHeader(h.first)) {
+            req.setRawHeader(h.first, h.second);
+        }
+    }
+
+    QNetworkReply *reply = nullptr;
+    if (verb == QLatin1String("HEAD")) {
+        reply = _nam->head(req);
+    } else if (verb == QLatin1String("DELETE")) {
+        reply = _nam->deleteResource(req);
+    } else {
+        req.setHeader(QNetworkRequest::ContentTypeHeader,
+                      contentType.isEmpty() ? QByteArrayLiteral("application/octet-stream") : contentType);
+        reply = (verb == QLatin1String("PUT")) ? _nam->put(req, body) : _nam->post(req, body);
+    }
+    if (!reply) {
+        fail.error = QStringLiteral("could not create request");
+        if (done) done(fail);
+        return;
+    }
+    _guardPin(reply);
+    _armDeadline(reply, timeoutMs);
     _wire(reply, std::move(done));
+}
+
+QNetworkReply *HttpClient::putRange(const QString &path, const QString &filePath, qint64 offset,
+                                    qint64 length, const QByteArray &sha256Hex, qint64 totalSize,
+                                    Handler done, Progress progress, int idleTimeoutMs)
+{
+    HttpReply fail;
+    if (_baseUrl.isEmpty()) {
+        fail.error = QStringLiteral("no server address configured");
+        if (done) done(fail);
+        return nullptr;
+    }
+    if (_pinNeedsTls(fail)) {
+        if (done) done(fail);
+        return nullptr;
+    }
+    if (length <= 0 || offset < 0 || offset + length > totalSize) {
+        fail.error = QStringLiteral("invalid byte range");
+        if (done) done(fail);
+        return nullptr;
+    }
+
+    auto *device = new FileRangeDevice(filePath, offset, length);
+    QString why;
+    if (!device->openRange(&why)) {
+        fail.error = QStringLiteral("cannot read %1: %2").arg(filePath, why);
+        delete device;
+        if (done) done(fail);
+        return nullptr;
+    }
+
+    QNetworkRequest req = _request(path, true);
+    req.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/octet-stream"));
+    req.setHeader(QNetworkRequest::ContentLengthHeader, length);
+    req.setRawHeader("Content-Range", QStringLiteral("bytes %1-%2/%3")
+                                          .arg(offset).arg(offset + length - 1).arg(totalSize).toLatin1());
+    req.setRawHeader("X-Chunk-SHA256", sha256Hex);
+    req.setTransferTimeout(idleTimeoutMs);
+
+    QNetworkReply *reply = _nam->put(req, device);
+    if (!reply) {
+        delete device;
+        fail.error = QStringLiteral("could not create request");
+        if (done) done(fail);
+        return nullptr;
+    }
+    device->setParent(reply);       // closed and freed with the reply
+    _guardPin(reply);
+    reply->setProperty(kBodySent, qint64(0));
+    connect(reply, &QNetworkReply::uploadProgress, reply, [reply](qint64 sent, qint64) {
+        reply->setProperty(kBodySent, sent);
+    });
+    if (progress) {
+        connect(reply, &QNetworkReply::uploadProgress, this,
+                [progress = std::move(progress)](qint64 sent, qint64 total) {
+            progress(sent, total);
+        });
+    }
+    _wire(reply, std::move(done));
+    return reply;
 }
 
 void HttpClient::_wire(QNetworkReply *reply, Handler done)
 {
     const quint64 gen = _generation;
+    _inFlight.removeIf([](const QPointer<QNetworkReply> &r) { return r.isNull() || r->isFinished(); });
+    _inFlight.append(QPointer<QNetworkReply>(reply));
     connect(reply, &QNetworkReply::finished, this,
             [this, gen, reply, done = std::move(done)]() {
         // Belongs to a session that has since been torn down. Free it and say
@@ -381,6 +590,7 @@ void HttpClient::_wire(QNetworkReply *reply, Handler done)
 
         HttpReply out;
         out.raw    = reply->readAll();
+        out.headers = reply->rawHeaderPairs();
         out.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         out.netOk  = (out.status > 0);
         if (!out.raw.isEmpty()) {
@@ -391,6 +601,11 @@ void HttpClient::_wire(QNetworkReply *reply, Handler done)
         }
         if (reply->error() != QNetworkReply::NoError && !out.netOk) {
             out.error = reply->errorString();
+            out.netError = int(reply->error());
+        }
+        const QVariant sent = reply->property(kBodySent);
+        if (sent.isValid()) {
+            out.bodySent = sent.toLongLong();
         }
         if (reply->property(kPinRefused).toBool()) {
             out.netOk = false;

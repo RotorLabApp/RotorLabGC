@@ -1,12 +1,12 @@
 # Options
 
-The settings RotorLab adds to GC, with their on-screen labels and defaults in GC 5.1.1. QGroundControl's own settings (Fly View, Plan View, Video, Comm Links, Maps and the rest) work as they do in QGroundControl. All of these pages are under Application Settings.
+The settings RotorLab adds to GC, with their on-screen labels and defaults in GC 5.1.1. QGroundControl's own settings (Fly View, Plan View, Comm Links, Maps and the rest) work as they do in QGroundControl. All of these pages are under Application Settings.
 
 ## RotorLab Connector
 
 Source: `custom/res/rotorlab/RotorLabConnectorSettings.qml`, `custom/src/rotorlab/`.
 
-"Nothing here can hold up a launch." The page says so, and the connector is designed that way: arming, flight and video do not wait on it.
+"Nothing here can hold up a launch." The page says so, and the connector is designed that way: arming and flight do not wait on it.
 
 ### RotorLab Connector
 

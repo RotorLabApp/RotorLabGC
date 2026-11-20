@@ -23,6 +23,8 @@
 #pragma once
 
 #include <QtCore/QByteArray>
+#include <QtCore/QDateTime>
+#include <QtCore/QHash>
 #include <QtCore/QJsonObject>
 #include <QtCore/QMap>
 #include <QtCore/QObject>
@@ -36,6 +38,7 @@
 #include "TakPolicy.h"
 #include "fleet/GuidedDispatch.h"
 
+class QSettings;
 class QSslSocket;
 class Vehicle;
 namespace CoT { struct Marker; struct Entity; }
@@ -44,17 +47,25 @@ class TakManager : public QObject
 {
     Q_OBJECT
     friend class TakManagerTest;
+    friend class TakMarkerTest;
     friend class TakEnrollWireTest;
+    friend class FleetEnrollTest;
 
     // --- connection / identity ---
     Q_PROPERTY(QString host            MEMBER _host            NOTIFY configChanged)
     Q_PROPERTY(int     port            MEMBER _port            NOTIFY configChanged)
     Q_PROPERTY(int     enrollPort      MEMBER _enrollPort      NOTIFY configChanged)
     Q_PROPERTY(QString username        MEMBER _username        NOTIFY configChanged)
+    // Held in memory; saved only to the platform key store (G41), never to
+    // the settings file. passwordStorageText says where it is kept.
     Q_PROPERTY(QString password        MEMBER _password        NOTIFY configChanged)
-    Q_PROPERTY(QString callsignPrefix  MEMBER _callsignPrefix  NOTIFY configChanged)
+    Q_PROPERTY(QString passwordStorageText READ passwordStorageText NOTIFY passwordStorageChanged)
+    /// Written through setCallsignPrefix: a prefix that cannot name the
+    /// station is not saved, and a change turns "Commands to aircraft on"
+    /// off (G47).
+    Q_PROPERTY(QString callsignPrefix  READ callsignPrefix WRITE setCallsignPrefix NOTIFY configChanged)
     Q_PROPERTY(QString gcsUid          MEMBER _gcsUid          NOTIFY configChanged)
-    Q_PROPERTY(bool    verifyPeer      MEMBER _verifyPeer      NOTIFY configChanged)
+    Q_PROPERTY(bool    verifyPeer      READ verifyPeer WRITE setVerifyPeer NOTIFY configChanged)
     // Server certificate the operator accepted on the TAK page (SHA-256), and
     // one waiting to be accepted. Used for enrollment and the CoT stream.
     Q_PROPERTY(QString pinnedFingerprint  READ pinnedFingerprint  NOTIFY fingerprintChanged)
@@ -64,6 +75,9 @@ class TakManager : public QObject
     Q_PROPERTY(bool    publishEnabled  MEMBER _publishEnabled  NOTIFY configChanged)
 
     Q_PROPERTY(bool    publishGcsBeacon MEMBER _publishGcsBeacon NOTIFY configChanged)
+    // Off by default (new and upgraded installs): the beacon then carries the
+    // CoT unknown point, never the station's location.
+    Q_PROPERTY(bool    shareStationPosition MEMBER _shareStationPosition NOTIFY configChanged)
 
     // --- GCS position source ---
     // gcsManual=false: use QGC's ground-station position (system location or an
@@ -86,6 +100,33 @@ class TakManager : public QObject
     Q_PROPERTY(bool    commandEnabled  MEMBER _commandEnabled  NOTIFY configChanged)
     Q_PROPERTY(bool    c2Allowed       MEMBER _c2Allowed       NOTIFY configChanged)
     Q_PROPERTY(bool    c2Armed         READ c2Armed WRITE setC2Armed NOTIFY c2ArmedChanged)
+    /// True while the callsign prefix is empty: every inbound uid then looks
+    /// like this station's own, so no command is read. Shown on the TAK page (G50).
+    Q_PROPERTY(bool    commandPrefixEmpty READ commandPrefixEmpty NOTIFY configChanged)
+    Q_PROPERTY(QString emptyPrefixNotice  READ emptyPrefixNotice  CONSTANT)
+    // --- addressing (G47, G48). A routing rule, not authentication. ---
+    /// The saved prefix cannot name this station (T13), or empty.
+    Q_PROPERTY(QString prefixProblemNotice READ prefixProblemNotice NOTIFY configChanged)
+    /// Why the last prefix entered was not saved (T12), or empty.
+    Q_PROPERTY(QString prefixEntryError    READ prefixEntryError    NOTIFY prefixNoticeChanged)
+    /// The last prefix change (T14), or empty.
+    Q_PROPERTY(QString prefixChangedNotice READ prefixChangedNotice NOTIFY prefixNoticeChanged)
+    /// Another station on the link uses this prefix (T8), or empty.
+    Q_PROPERTY(QString prefixConflictNotice READ prefixConflictNotice NOTIFY addressingChanged)
+    /// How a marker names this station's aircraft (T17).
+    Q_PROPERTY(QString addressingHelp      READ addressingHelp      NOTIFY configChanged)
+    /// The prefix has not been set or confirmed on this install (T19), or
+    /// empty (security M1).
+    Q_PROPERTY(QString prefixNotSetNotice  READ prefixNotSetNotice  NOTIFY configChanged)
+    /// The last station test command went to an aircraft.
+    Q_PROPERTY(bool    lastTestSent        READ lastTestSent        NOTIFY remoteCommandsChanged)
+    /// Non-empty while command markers are being dropped (rate limit, too many
+    /// markers to check for repeats, or the marker time), updated once a
+    /// second (5.1.2 review R1, R3).
+    Q_PROPERTY(QString commandDropNotice  READ commandDropNotice  NOTIFY commandDropNoticeChanged)
+    /// The one-line fly-view form of the same notice (same counts, same
+    /// clear-after-a-minute rule), or empty (5.1.2 review L2).
+    Q_PROPERTY(QString flyDropNotice      READ flyDropNotice      NOTIFY commandDropNoticeChanged)
 
     // --- per-verb enable (the trust boundary) ---
     Q_PROPERTY(bool    verbGoto        MEMBER _verbGoto        NOTIFY configChanged)
@@ -127,6 +168,9 @@ class TakManager : public QObject
     Q_PROPERTY(bool    haveTruststore  READ haveTruststore  NOTIFY enrolledChanged)
     Q_PROPERTY(QString certInfo        READ certInfo        NOTIFY enrolledChanged)
     Q_PROPERTY(QString statusText      READ statusText      NOTIFY statusTextChanged)
+    /// Set when joining a Fleet Server closed the TAK link or turned
+    /// "Commands to aircraft on" off (G40); shown on the Fleet Connector page.
+    Q_PROPERTY(QString fleetHandOffNotice READ fleetHandOffNotice NOTIFY fleetHandOffNoticeChanged)
     /// Any CoT event (other than this station's own) arrived on the current link.
     Q_PROPERTY(bool    cotReceivedSinceConnect READ cotReceivedSinceConnect NOTIFY cotReceivedChanged)
 
@@ -142,6 +186,30 @@ class TakManager : public QObject
     Q_PROPERTY(bool         commandLogError READ commandLogError NOTIFY commandLogErrorChanged)
 
 public:
+    bool    commandPrefixEmpty() const { return _callsignPrefix.isEmpty(); }   ///< G50
+    QString callsignPrefix() const { return _callsignPrefix; }
+    /// Save a new prefix when it can name this station (G47): it is trimmed,
+    /// "Commands to aircraft on" is turned off, and markers placed before the
+    /// change are not run. Otherwise nothing changes and prefixEntryError
+    /// says why.
+    void    setCallsignPrefix(const QString &prefix);
+    QString prefixProblemNotice() const;
+    QString prefixEntryError() const { return _prefixEntryError; }
+    QString prefixChangedNotice() const { return _prefixChangedNotice; }
+    QString prefixConflictNotice() const { return _prefixConflictNotice; }
+    QString addressingHelp() const { return TakPolicy::addressingHelp(_callsignPrefix); }
+    /// True when the prefix was set or confirmed on this install
+    /// (setCallsignPrefix): an install that never did reads no commands
+    /// (security M1). One upgraded with the old shared default ROTOR is
+    /// offered its own default instead, and ROTOR cannot be set.
+    bool    prefixSet() const { return !_prefixSetFor.isEmpty() && _prefixSetFor == _callsignPrefix; }
+    QString prefixNotSetNotice() const;
+    /// Confirm the prefix shown on the page for this install.
+    Q_INVOKABLE void confirmCallsignPrefix() { setCallsignPrefix(_callsignPrefix); }
+    bool    lastTestSent() const { return _lastTestSent; }
+    QString emptyPrefixNotice() const { return TakPolicy::emptyPrefixNotice(); }
+    QString commandDropNotice() const { return _commandDropNotice; }
+    QString flyDropNotice() const { return _flyDropNotice; }
     explicit TakManager(QObject *parent = nullptr);
     ~TakManager() override;
 
@@ -151,6 +219,30 @@ public:
     void    setC2Armed(bool armed);
 
     bool    connected() const { return _connected; }
+    bool    verifyPeer() const { return _verifyPeer; }
+    void    setVerifyPeer(bool on);           ///< logs every change (G40)
+    QString passwordStorageText() const { return _passwordStorageText; }
+    QString fleetHandOffNotice() const { return _fleetHandOffNotice; }
+
+    /// The key-store account the TAK password is filed under (G41). A unit
+    /// test build run as a test uses its own per-process name.
+    static QString passwordAccount();
+
+    /// Largest partial CoT event kept while waiting for its end (G46).
+    static constexpr qsizetype kMaxRxBufferBytes = 1024 * 1024;
+    /// Events handled per pass; the rest from the event loop (S2).
+    static constexpr int kMaxRxEventsPerPass = 200;
+    static constexpr int kRxPassBudgetMs = 10;      ///< and at most this long per pass (R5)
+
+    /// A Fleet Server became this station's route to ATAK (G40): the TAK page
+    /// is hidden from now on, so close the TAK link and turn "Commands to
+    /// aircraft on" off, and say so. Settings are kept.
+    void handOffToFleet();
+    /// The Fleet Server is no longer the route: drop the notice.
+    void clearFleetHandOff();
+    /// Called by FleetConnector. Act on the TAK manager only if it exists:
+    /// when it does not, there is no link to close.
+    static void fleetRouteChanged(bool fleetIsRoute);
     bool    enrolled() const;
     bool    haveTruststore() const { return !_caCertPem.isEmpty(); }
     QString certInfo() const;                ///< subject + expiry of the loaded client cert / CA
@@ -177,8 +269,8 @@ public:
     Q_INVOKABLE void forgetServerFingerprint();
 
     /// Import a CA truststore (TAK truststore-*.p12 or a PEM bundle). The
-    /// password is the p12 pass phrase (TAK default is "atakatak"); ignored
-    /// for PEM. Returns true and stores ca_cert.pem on success.
+    /// password is the p12 pass phrase; empty means the TAK default
+    /// "atakatak" (then an empty pass phrase); ignored for PEM. Returns true and stores ca_cert.pem on success.
     Q_INVOKABLE bool importTruststore(const QString &path, const QString &password);
 
     /// Import a client identity (personal key) as a p12/pfx, or a PEM that
@@ -255,8 +347,13 @@ signals:
     void commandLogErrorChanged();
     void trustStateChanged();      ///< C2, uplink arm or the approved list changed
     void fingerprintChanged();
+    void passwordStorageChanged();
+    void fleetHandOffNoticeChanged();
     /// Emitted after a received command has been handled (dispatched or not).
     void remoteCommandReceived(const QVariantMap &entry);
+    void commandDropNoticeChanged();
+    void prefixNoticeChanged();
+    void addressingChanged();
 
 private slots:
     void _onEncrypted();
@@ -272,10 +369,41 @@ private:
     void    _loadCerts();
     void    _persist();                      ///< write config to QSettings (silent, no signal)
 
+    // TAK password in the platform key store (G41).
+    enum class PasswordStore { None, Stored, SessionOnly, NotSaved, Pending };
+    void    _loadPassword(QSettings &s);     ///< read it, moving a plain settings value once
+    void    _savePassword();                 ///< store _password when it changed
+    void    _setPasswordStore(PasswordStore st, bool movedFromSettings = false);
+    /// Write a PEM file; a private key is restricted to the current user.
+    static bool _writePemFile(const QString &path, const QByteArray &data, bool privateKey,
+                              QString *error = nullptr);
+    /// Restrict an existing file to the current user. True on success.
+    static bool _restrictToOwner(const QString &path);
+
+    /// The socket reported an error (G45). Before the link is up this is a
+    /// failed connect: say so in the status.
+    void    _onSocketError(const QString &error);
+    /// Append received bytes and handle each complete event, keeping at most
+    /// kMaxRxBufferBytes of a partial one (G46).
+    void    _consumeRx(const QByteArray &bytes);
+    /// Read what fits under the bound and handle it (S2).
+    void    _drainRx();
+#ifdef QGC_UNITTEST_BUILD
+    static inline bool s_failRestrictForTest = false;   ///< tests: _restrictToOwner fails
+#endif
+
     bool    _makeCsr(const QString &cn, QByteArray &keyPemOut, QString &csrB64Out, QString &err);
     QString _findOpenssl() const;
 
     void    _handleMarker(const QByteArray &eventXml);
+    /// Why a point sent to <prefix>-<sysid> is not read (G40), or empty when
+    /// it is: "Let ATAK address drones" is off, or that aircraft publishes a
+    /// Fleet callsign instead of the <prefix>-<sysid> name.
+    QString _sendToIgnoredReason(int sysid) const;
+    /// Write "marker ignored: <reason>" to the TAK log, once per marker uid
+    /// and reason, so a repeating report does not flood the log (G36).
+    void    _noteIgnoredMarker(const CoT::Marker &m, const QString &name, const QString &reason,
+                               const QString &onceKey = QString());
     bool    _verbEnabled(Tak::Verb v) const;
     bool    _senderApproved(const CoT::Marker &m, QString &whoOut) const;
     bool    _senderApproved(const QString &senderCallsign, const QString &senderUid,
@@ -340,6 +468,31 @@ private:
     /// Map this path's verb enum onto the shared dispatcher's.
     static Guided::Verb _guidedVerb(Tak::Verb v);
     QList<Vehicle *> _resolveTargets(const Tak::Command &cmd) const;
+    /// The vehicles a command names when it is for this station, else none.
+    QList<Vehicle *> _addressedTargets(const Tak::Command &cmd) const;
+
+    // --- addressing (G47). A routing rule, not authentication: every name
+    // and uid read here is written by the sending device. ---
+    /// What the classifier needs: this station's prefix and nameable Fleet
+    /// callsigns, and what other stations were seen on the link recently.
+    TakPolicy::AddressInput _addressInput() const;
+    /// Nameable Fleet callsigns (normalized) -> sysid; a callsign two of this
+    /// station's aircraft share is left out.
+    QHash<QString, int> _fleetNames() const;
+    /// Read station names, aircraft names and prefix conflicts from a
+    /// device report (an event with <takv> or <__group>), never from a
+    /// placed marker. Called for every event before loop prevention.
+    void    _noteAddressSignals(const CoT::Marker &m);
+    bool    _prefixConflictActive() const;
+    /// When another station was last seen using `prefix` on the link (a
+    /// station event or an aircraft linked to it), ms since epoch, or 0.
+    qint64  _prefixLastSeenElsewhere(const QString &prefix) const;
+    /// Empty when the prefix can be used for commands; else why not
+    /// (G50 empty, T13 badly formed, T19 not set on this install).
+    QString _prefixUnusableReason() const;
+    void    _updateConflictNotice();
+    void    _pruneAddressSeen();
+    void    _rememberOtherStation(const QByteArray &uidHash);
     Vehicle *_vehicleById(int sysid) const;
     QString  _targetLabel(Vehicle *veh) const;
 
@@ -362,7 +515,11 @@ private:
     int     _enrollPort = 8446;
     QString _username;
     QString _password;
-    QString _callsignPrefix = QStringLiteral("ROTOR");
+    /// Set in the constructor: the saved value, else TakPolicy::defaultPrefixFor(_gcsUid).
+    QString _callsignPrefix;
+    /// The prefix setCallsignPrefix last saved on this install (security M1).
+    QString _prefixSetFor;
+    bool    _lastTestSent = false;
     QString _gcsUid;
     bool    _verifyPeer = TakDefaults::verifyPeer;
     QString _pinnedFingerprint;          ///< SHA-256 of the server certificate the operator accepted
@@ -370,6 +527,7 @@ private:
     bool    _pendingFromEnroll = false;  ///< accepting it re-runs enrollment
     bool    _publishEnabled = false;
     bool    _publishGcsBeacon = true;
+    bool    _shareStationPosition = TakDefaults::shareStationPosition; ///< beacon carries the station position
     bool    _gcsManual = false;          ///< true = broadcast the fixed lat/lon/alt below
     double  _gcsManualLat = 0.0;
     double  _gcsManualLon = 0.0;
@@ -421,6 +579,101 @@ private:
     bool        _presenceWasNeeded = false; ///< _presenceNeeded() at the last check on this link
     QGeoCoordinate _lastBeaconPos;     ///< last real position a beacon carried on this link
     QSet<QString> _ownUids;            ///< uids this station sent on this link (its own, never "received")
+    /// SHA-1 of "uid|reason|key" already written as "marker ignored" (capped).
+    QSet<QByteArray> _ignoredNoted;
+    /// Markers that reached the command path this session: uid (trimmed,
+    /// lower case, at most kMaxMarkerField characters) -> the CoT time it
+    /// carried, and its stale time clamped to receipt + kMarkerKeepSecs for
+    /// pruning (G43, G36). Kept across disconnects, because a server may
+    /// replay recent CoT on connect. Never grows past _maxMarkersSeen. When
+    /// full, the oldest entry (receipt order) is dropped only if its CoT time
+    /// is at least kRepeatFloorAgeSecs old, and _repeatFloorUtc is raised to
+    /// that time, so a replay of it is refused; otherwise the new marker is
+    /// refused (reviews M1, E1).
+    struct MarkerSeen {
+        QString   time;
+        QDateTime stale;
+        QDateTime cotTime;
+        quint64   seq = 0;             ///< receipt number, matches _seenOrder
+    };
+    QHash<QString, MarkerSeen> _markersSeen;
+    QList<QPair<QString, quint64>> _seenOrder;   ///< (key, seq) in receipt order; stale pairs are skipped
+    quint64     _seenSeq = 0;
+    /// Markers with a CoT time at or before this are refused for the session:
+    /// they may have been dropped from the repeat list (E1). Always at least
+    /// kRepeatFloorAgeSecs in the past when raised.
+    QDateTime   _repeatFloorUtc;
+    static constexpr int kRepeatFloorAgeSecs = 30 * 60;
+    /// SHA-1 of the UIDs of markers dropped by the rate limit or a full repeat
+    /// list, or evicted from it, this session; they are not run if delivered
+    /// again or edited (L1, E1). Bounded, oldest out.
+    QSet<QByteArray> _droppedUids;
+    QList<QByteArray> _droppedOrder;
+    static constexpr int kMaxDroppedUids = 2000;
+    void    _rememberDropped(const QString &seenKey);
+    int         _maxMarkersSeen = 20000;
+    /// Command markers older than this session (minus kSessionSkewSecs) are
+    /// not run, so a replay after a restart does not run again (review S3).
+    QDateTime   _sessionStartUtc = QDateTime::currentDateTimeUtc();
+    /// Command markers placed before the last prefix change are not run (G47).
+    QDateTime   _prefixFloorUtc;
+    // Addressing (G47): when each was last seen on the link, ms since epoch.
+    // Entries older than TakPolicy::kAddressSeenSecs do not count. Bounded.
+    QHash<QString, qint64> _seenStations;               ///< other station prefix -> last seen
+    QHash<QString, QPair<QString, qint64>> _seenAircraft; ///< other aircraft name -> (station, last seen)
+    QHash<QString, qint64> _fleetConflicts;             ///< our Fleet callsign seen elsewhere -> last seen
+    qint64      _prefixConflictMs = 0;                  ///< another station using this prefix, last seen
+    QString     _prefixConflictPrefix;                  ///< the prefix that conflict was about (normalized)
+    QString     _prefixConflictNotice;
+    QString     _prefixEntryError;
+    QString     _prefixChangedNotice;
+    static constexpr int kMaxAddressSeen = 512;
+    /// SHA-1 of the UIDs of markers addressed to another station this
+    /// session; an edit or repeat of one is not run here (T6). Bounded.
+    QSet<QByteArray>  _otherStationUids;
+    QList<QByteArray> _otherStationOrder;
+    /// Command markers run from the stream, per second and per minute, with
+    /// a separate budget for senders on the ATAK command senders list
+    /// (index 0) and for all others (index 1) (reviews S1, R1). Counted after
+    /// the placed-marker and repeat checks. Excess markers are not read; one
+    /// summary line a second says how many.
+    int         _maxCommandsPerSecond = 5;
+    int         _maxCommandsPerMinute = 60;
+    qint64      _rateSecond[2] = { -1, -1 };
+    int         _rateSecondCount[2] = { 0, 0 };
+    qint64      _rateMinute[2] = { -1, -1 };
+    int         _rateMinuteCount[2] = { 0, 0 };
+    int         _rateDropped = 0;
+    /// "marker ignored" lines written per second; excess lines are counted
+    /// and summarized (review R6).
+    static constexpr int kMaxIgnoredLinesPerSecond = 10;
+    qint64      _ignoredLineSecond = -1;
+    int         _ignoredLineCount = 0;
+    int         _ignoredLinesDropped = 0;
+    /// Drops in the last minute by kind, for commandDropNotice (R1, R3).
+    enum DropKind { DropRate = 0, DropFull = 1, DropTime = 2, DropKinds = 3 };
+    int         _dropCount[DropKinds] = { 0, 0, 0 };
+    qint64      _dropLastMs[DropKinds] = { 0, 0, 0 };
+    QString     _commandDropNotice;
+    QString     _flyDropNotice;
+    void    _noteDrop(DropKind kind);
+    void    _updateDropNotice();
+    QTimer      _markerTimer;          ///< 1 s: rate summary; every 60 s: prune _markersSeen
+    int         _markerTimerTicks = 0;
+    bool        _markerTimerReady = false;
+    /// While a stream command is recorded, the list signal is coalesced
+    /// (one QML list rebuild per _listTimer interval, review S1).
+    bool        _coalesceListSignal = false;
+    QTimer      _listTimer;
+    static constexpr qsizetype kMaxCommandEventBytes = 64 * 1024;
+    static constexpr int kMaxMarkerField  = 128;
+    static constexpr int kMarkerKeepSecs  = 25 * 3600;
+    static constexpr int kSessionSkewSecs = 60;
+    void    _startMarkerTimers();
+    bool    _commandRateAllows(bool listedSender);
+    void    _markerTimerTick();
+    void    _pruneMarkersSeen();
+    void    _flushRateSummary();
     bool        _cotReceived = false;  ///< any CoT from the server on the current link
     bool        _recordSent = false;   ///< tests: keep every event written in _sentEvents
     QList<QByteArray> _sentEvents;
@@ -428,6 +681,17 @@ private:
     QByteArray  _rxBuf;
     bool        _connected = false;
     QString     _statusText = QStringLiteral("idle");
+    QString     _connectError;          ///< why the current connect attempt failed (G45)
+    QString     _fleetHandOffNotice;
+    bool        _fleetIsRoute = false;  ///< S4: no direct link and no commands while set
+    bool        _rxDrainScheduled = false;
+    bool        _plainPasswordPending = false; ///< S6: plain value stays in settings until stored
+    bool        _storeRefusedArmed = false; ///< the last key-store refusal was the armed rule
+    QString     _plainPasswordLoaded;   ///< R2: that plain value; pending only while it is the password
+    PasswordStore _passwordStore = PasswordStore::None;
+    bool        _passwordMoved = false; ///< moved from the settings file at this start
+    QString     _passwordSaved;         ///< the value the key store holds (or "" for none)
+    QString     _passwordStorageText;
     QVariantList _remoteCommands;      ///< newest first, capped at kMaxRemoteCommands
     int         _nextRemoteId = 1;
     QString     _lastLogHash;          ///< SHA-256 of the command log's last line

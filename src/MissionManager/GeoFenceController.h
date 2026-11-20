@@ -38,6 +38,13 @@ public:
     Q_PROPERTY(QGeoCoordinate       breachReturnPoint       READ breachReturnPoint      WRITE setBreachReturnPoint  NOTIFY breachReturnPointChanged)
     Q_PROPERTY(Fact*                breachReturnAltitude    READ breachReturnAltitude                               CONSTANT)
 
+    // RotorLab GC 5.2.0 (G86): whether the autopilot uses the breach return point's height, and
+    // the text the editor shows. ArduPilot keeps only the point's latitude and longitude, and PX4
+    // skips the point. The height is still stored and saved as read, so .plan files round-trip.
+    Q_PROPERTY(bool                 breachReturnAltitudeUsed    READ breachReturnAltitudeUsed   NOTIFY breachReturnAltitudeUsageChanged)
+    Q_PROPERTY(QString              breachReturnAltitudeLabel   READ breachReturnAltitudeLabel  NOTIFY breachReturnAltitudeUsageChanged)
+    Q_PROPERTY(QString              breachReturnAltitudeNote    READ breachReturnAltitudeNote   NOTIFY breachReturnAltitudeUsageChanged)
+
     // Radius of the "paramCircularFence" which is called the "Geofence Failsafe" in PX4 and the "Circular Geofence" on ArduPilot
     Q_PROPERTY(double               paramCircularFence      READ paramCircularFence                                 NOTIFY paramCircularFenceChanged)
 
@@ -87,12 +94,16 @@ public:
     QmlObjectListModel* polygons                (void) { return &_polygons; }
     QmlObjectListModel* circles                 (void) { return &_circles; }
     QGeoCoordinate      breachReturnPoint       (void) const { return _breachReturnPoint; }
+    bool                breachReturnAltitudeUsed    (void) const;
+    QString             breachReturnAltitudeLabel   (void) const;
+    QString             breachReturnAltitudeNote    (void) const;
 
     void setBreachReturnPoint   (const QGeoCoordinate& breachReturnPoint);
     bool isEmpty                (void) const;
 
 signals:
     void breachReturnPointChanged       (QGeoCoordinate breachReturnPoint);
+    void breachReturnAltitudeUsageChanged(void);
     void editorQmlChanged               (QString editorQml);
     void loadComplete                   (void);
     void paramCircularFenceChanged      (void);
@@ -116,6 +127,9 @@ private slots:
 
 private:
     void _init(void);
+
+    enum class BreachReturnUse { HeightUsed, ArduCopter, ArduPlane, ArduRover, ArduPilotOther, PX4 };
+    BreachReturnUse _breachReturnUse(void) const;
 
     Vehicle*            _managerVehicle =               nullptr;
     GeoFenceManager*    _geoFenceManager =              nullptr;

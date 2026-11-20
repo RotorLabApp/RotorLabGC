@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  RotorLab GC release build (Windows installer and Android arm64-v8a APK) from a git tag.
+  RotorLab GC release build (Windows installer, Android arm64-v8a APK and
+  Linux x86_64 AppImage) from a git tag.
 
 .DESCRIPTION
   release.ps1 builds the RotorLab GC release artifacts from one tag, always from
@@ -22,12 +23,21 @@
        RotorLabGC-installer.exe in the build folder.
     4. Android: arm64-v8a Release APK with Qt's android_arm64_v8a kit. Stops
        with a message if the kit is not installed; it never installs anything.
-    5. Reads the version off what was built and fails if it does not match the
+    5. Linux (G72, only with -Platform Linux): x86_64 AppImage, built in WSL2
+       (-WslDistro, default Ubuntu-22.04, the Linux CI runner's release) by
+       deploy/rotorlab/linux/build-appimage.sh with the CI job's recipe (Qt
+       6.8.3 linux_gcc_64, Ninja, "cmake --install", which runs
+       cmake/CreateAppImage.cmake). It clones the same tag from this repository
+       into a new folder in WSL, checks the commit, builds with $CommonOptions,
+       checks the version string, the shipped files and the license texts, and
+       runs the boot test. The build host is set up once with
+       deploy/rotorlab/linux/setup-build-host.sh; this script never installs.
+    6. Reads the version off what was built and fails if it does not match the
        tag: the version string compiled into the binary (QGC_APP_VERSION_STR,
        shown in the app) and, for a vX.Y.Z tag, the numeric version (Windows
        file version resource, APK versionName). The Windows exe must carry a
        version resource (ProductVersion = tag, FileVersion = tag numbers .0).
-    6. Copies the artifacts to the output folder and PRINTS the signing step.
+    7. Copies the artifacts to the output folder and PRINTS the signing step.
        It signs nothing, uploads nothing, pushes nothing and creates no tags.
 
   CMake options are stated below in $CommonOptions; every shipped platform
@@ -39,7 +49,15 @@
   is reported but not enforced.
 
 .PARAMETER Platform
-  Windows, Android, or both (default).
+  Windows, Android, Linux, or several. Default: Windows and Android. A release
+  that ships Linux (5.2.0 and later) passes -Platform Windows,Android,Linux.
+
+.PARAMETER WslDistro
+  WSL2 distro that builds the Linux AppImage. Default: Ubuntu-22.04.
+
+.PARAMETER WslUser
+  Normal (not root) user in that distro who runs the Linux build. Default:
+  gcbuild (made by setup-build-host.sh).
 
 .PARAMETER WorkDir
   Folder for this run's build trees and output. Default:
@@ -48,6 +66,14 @@
 
 .PARAMETER OutDir
   Artifact folder. Default: <WorkDir>/artifacts. Must not exist or be empty.
+
+.PARAMETER QtRoot
+  Qt 6.8.3 install folder that holds msvc2022_64 and android_arm64_v8a.
+  Default: C:/Qt/6.8.3.
+
+.PARAMETER VsRoot
+  Visual Studio 2022 install folder (vcvars64.bat is found under it).
+  Default: the Community edition's standard folder.
 
 .PARAMETER VerifyExe
   Only run the version check of an already built Windows exe (or Android .so)
@@ -63,14 +89,6 @@
   Only run the same checks on an APK and exit: exit 1 if it is debuggable,
   packages a debug-only library or a qmltooling plugin, or lacks the license
   files under assets/licenses/.
-
-.PARAMETER QtRoot
-  Qt 6.8.3 install folder that holds msvc2022_64 and android_arm64_v8a.
-  Default: C:/Qt/6.8.3.
-
-.PARAMETER VsRoot
-  Visual Studio 2022 install folder (vcvars64.bat is found under it).
-  Default: the Community edition's standard folder.
 
 .PARAMETER NinjaDir
   Folder holding ninja.exe. Default: the ninja.exe found on PATH.
@@ -95,7 +113,9 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory = $true)] [string] $Tag,
-    [ValidateSet('Windows', 'Android')] [string[]] $Platform = @('Windows', 'Android'),
+    [ValidateSet('Windows', 'Android', 'Linux')] [string[]] $Platform = @('Windows', 'Android'),
+    [string] $WslDistro     = 'Ubuntu-22.04',
+    [string] $WslUser       = 'gcbuild',
     [string] $SourceDir,
     [string] $WorkDir,
     [string] $OutDir,
@@ -187,6 +207,43 @@ function Test-EmbeddedString([string] $Path, [string] $Text) {
     $data   = $latin1.GetString([System.IO.File]::ReadAllBytes($Path))
     $rx     = '(?<![\x20-\x7E])' + [regex]::Escape($Text) + '\x00'
     return [regex]::IsMatch($data, $rx)
+}
+
+# ---------------------------------------------------------------- test-key hook check
+
+# A stable build reads no license key
+# and no RotorLab address from the environment: ROTORLAB_LICENSE_PUBKEYS
+# (LicenseRecord.cc pinnedKeys()) and ROTORLAB_BASE_URL (RotorLabStore.cc
+# baseUrl()) are compiled in only under #ifdef QGC_DAILY_BUILD, which exists only
+# when QGC_STABLE_BUILD is OFF. Both names are plain char literals passed to
+# qgetenv, so a Latin-1 scan of the binary finds them when they are compiled in.
+# The positive control is RotorLab's CI, which requires both names in a Daily
+# binary.
+$TestKeyHookNames = @('ROTORLAB_LICENSE_PUBKEYS', 'ROTORLAB_BASE_URL')
+$TestKeyHookLine  = 'test-key hook: none (' + ($TestKeyHookNames -join ', ') + ')'
+
+# Returns $true when $Path contains none of the test-key hook names.
+function Test-NoTestKeyHook([string] $Path) {
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { Say "  test-key hook check: $Path not found"; return $false }
+    $latin1 = [System.Text.Encoding]::GetEncoding(28591)
+    $data   = $latin1.GetString([System.IO.File]::ReadAllBytes($Path))
+    $hits   = @($TestKeyHookNames | Where-Object { $data.Contains($_) })
+    if ($hits.Count -gt 0) {
+        Say "  TEST-KEY HOOK FOUND in ${Path}: $($hits -join ', ') (a Daily build, not a stable one)"
+        return $false
+    }
+    Say "  $TestKeyHookLine in $Path"
+    return $true
+}
+
+# Refuses a build folder that was not configured as a stable build.
+function Assert-StableConfigured([string] $BuildDir) {
+    $cache = Join-Path $BuildDir 'CMakeCache.txt'
+    if (-not (Test-Path -LiteralPath $cache)) { Fail "no CMakeCache.txt in $BuildDir" }
+    $hit = Select-String -LiteralPath $cache -Pattern '^QGC_STABLE_BUILD:BOOL=(.*)$' | Select-Object -First 1
+    $v = if ($hit) { $hit.Matches[0].Groups[1].Value.Trim() } else { '' }
+    if ($v -notmatch '^(?i)(ON|TRUE|YES|1)$') { Fail "$BuildDir is configured with QGC_STABLE_BUILD='$v'; a release is a stable build (QGC_STABLE_BUILD=ON)" }
+    Say "  configured QGC_STABLE_BUILD=$v ($cache)"
 }
 
 # Finds the describe-style version strings (tag, or tag-N-gHASH) for display.
@@ -470,6 +527,7 @@ try {
                          "-DQT_HOST_PATH=$QtDesktopKit",
                          "-DCMAKE_INSTALL_PREFIX=$staging") + $CommonOptions
             Invoke-Native (Join-Path $QtDesktopKit 'bin/qt-cmake.bat') $winArgs
+            Assert-StableConfigured $bw
             Invoke-Native 'cmake' @('--build', $bw, '--target', 'all', '--config', 'Release')
             Invoke-Native 'cmake' @('--install', $bw, '--config', 'Release')
         } finally {
@@ -490,12 +548,17 @@ try {
         $ok2 = Test-WindowsExeVersion $exeStaging $Tag (-not $DryRun)
         $ok3 = Test-ConfiguredVersion $bw $Tag
         if (-not ($ok1 -and $ok2 -and $ok3)) { $WinOk = $false; Fail "Windows version check failed; artifacts were not copied" }
+        Say "test-key hook check (Windows):"
+        $hook1 = Test-NoTestKeyHook $exeBuilt
+        $hook2 = Test-NoTestKeyHook $exeStaging
+        if (-not ($hook1 -and $hook2)) { $WinOk = $false; Fail "Windows test-key hook check failed; the installer was not copied" }
 
         $winOut = Join-Path $OutDir "$AppName-$Tag-windows-x64-installer.exe"
         Copy-Item $installer $winOut
         $artifacts.Add($winOut)
         $vi = (Get-Item $exeStaging).VersionInfo
         $info.Add("windows:    msvc2022_64, $(Split-Path $winOut -Leaf), exe file version $($vi.FileMajorPart).$($vi.FileMinorPart).$($vi.FileBuildPart).$($vi.FilePrivatePart), product version '$($vi.ProductVersion)', version string '$Tag'")
+        $info.Add("  windows $TestKeyHookLine")
     }
 
     # ------------------------------------------------------------ Android
@@ -530,6 +593,7 @@ try {
                          '-DCMAKE_WARN_DEPRECATED=FALSE',
                          "-DCMAKE_INSTALL_PREFIX=$(Join-Path $ba 'staging')") + $CommonOptions
             Invoke-Native $kitCmake $andArgs
+            Assert-StableConfigured $ba
             Invoke-Native 'cmake' @('--build', $ba, '--target', 'all', '--config', 'Release')
             Invoke-Native 'cmake' @('--build', $ba, '--target', 'apk', '--config', 'Release')
         } finally {
@@ -561,6 +625,8 @@ try {
             } else { Say "  versionName not compared: '$Tag' is not a vX.Y.Z tag (dry run)" }
         } else { Say "  aapt.exe not found under $AndroidSdk/build-tools; APK versionName not read" }
         if (-not $andOk) { Fail "Android version check failed; APK was not copied" }
+        Say "test-key hook check (Android):"
+        if (-not (Test-NoTestKeyHook $so.FullName)) { Fail "Android test-key hook check failed; APK was not copied" }
         Say "VERSION CHECK PASS (Android): $Tag"
 
         # Unsigned on purpose; the signing step signs it in place (apksigner).
@@ -568,6 +634,62 @@ try {
         Copy-Item $apk.FullName $apkOut
         $artifacts.Add($apkOut)
         $info.Add("android:    $AndroidAbi, $(Split-Path $apkOut -Leaf) (unsigned until the signing step), versionName $apkVer, version string '$Tag'")
+        $info.Add("  android $TestKeyHookLine")
+    }
+
+    # ------------------------------------------------------------ Linux
+    # RotorLab: G72. Built in WSL2 from the same tag, with the Linux CI job's recipe.
+    if ($Platform -contains 'Linux') {
+        Say "=== Linux x86_64 Release (AppImage, WSL $WslDistro) ==="
+        $buildSh = Join-Path $PSScriptRoot 'linux/build-appimage.sh'
+        if (-not (Test-Path $buildSh)) { Fail "missing: $buildSh" }
+        if (-not (Get-Command wsl.exe -ErrorAction SilentlyContinue)) { Fail "wsl.exe not found; the Linux AppImage is built in WSL2" }
+        # wsl -l -q prints UTF-16; drop the NULs before comparing.
+        $distros = @((& wsl.exe -l -q) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ })
+        if ($distros -notcontains $WslDistro) {
+            Say "WSL distro '$WslDistro' NOT installed (installed: $($distros -join ', '))."
+            Say "Install it (wsl --install -d $WslDistro --no-launch), then run once as root:"
+            Say "  wsl -d $WslDistro -u root -- bash deploy/rotorlab/linux/setup-build-host.sh"
+            Say "Nothing was installed."
+            exit 3
+        }
+        function ConvertTo-WslPath([string] $P) {
+            $full = [System.IO.Path]::GetFullPath($P) -replace '\\', '/'
+            if ($full -notmatch '^([A-Za-z]):/(.*)$') { Fail "cannot map $P to a WSL path" }
+            return '/mnt/' + $Matches[1].ToLowerInvariant() + '/' + $Matches[2]
+        }
+        # The clone source is the repository's git folder (a worktree's .git file holds a Windows path).
+        $gitCommon = Invoke-Git @('rev-parse', '--path-format=absolute', '--git-common-dir')
+        $wslRepo   = ConvertTo-WslPath $gitCommon
+        $wslScript = ConvertTo-WslPath $buildSh
+        $wslHome   = "/home/$WslUser"
+        $wslWork   = "$wslHome/rotorlab-release/$Tag-$Stamp"
+        $wslOut    = "$wslWork/out"
+        # $CommonOptions with the CPM cache moved into WSL (a Windows path means nothing there).
+        $linuxOptions = @($CommonOptions | Where-Object { $_ -notmatch '^-D(QGC_)?CPM_SOURCE_CACHE=' }) +
+                        @("-DQGC_CPM_SOURCE_CACHE=$wslHome/.cache/rotorlab-cpm", "-DCPM_SOURCE_CACHE=$wslHome/.cache/rotorlab-cpm")
+        $shArgs = @('-d', $WslDistro, '-u', $WslUser, '--cd', $wslHome, '--', 'bash', $wslScript,
+                    '--repo', $wslRepo, '--tag', $Tag, '--commit', $tagCommit, '--work', $wslWork, '--out', $wslOut)
+        if ($DryRun) { $shArgs += '--dry-run' }
+        $shArgs += @('--') + $linuxOptions
+        Invoke-Native 'wsl.exe' $shArgs
+
+        # Copy out of WSL through its file share.
+        $uncOut = "\\wsl.localhost\$WslDistro" + ($wslOut -replace '/', '\')
+        $linuxName = "$AppName-$Tag-linux-x86_64.AppImage"
+        $appImage = Join-Path $uncOut $linuxName
+        if (-not (Test-Path -LiteralPath $appImage)) { Fail "AppImage not found after the Linux build: $appImage" }
+        $linuxOut = Join-Path $OutDir $linuxName
+        Copy-Item -LiteralPath $appImage $linuxOut
+        # The copy must be the file WSL built and checked.
+        $hWsl = ((& wsl.exe -d $WslDistro -u $WslUser -- sha256sum "$wslOut/$linuxName") -split '\s+')[0]
+        $hWin = (Get-FileHash -LiteralPath $linuxOut -Algorithm SHA256).Hash.ToLowerInvariant()
+        if ($hWsl -ne $hWin) { Fail "the AppImage copied out of WSL does not match ($hWin vs $hWsl)" }
+        $artifacts.Add($linuxOut)
+        $linuxInfo = Get-Content -LiteralPath (Join-Path $uncOut 'BUILD-INFO-linux.txt')
+        $info.Add("linux:      WSL $WslDistro, $linuxName, version string '$Tag'")
+        foreach ($l in $linuxInfo | Select-Object -Skip 4) { $info.Add("  $l") }
+        Say "VERSION CHECK PASS (Linux): $Tag"
     }
 
     # The source must still be the tag, unchanged, after the build.
@@ -589,8 +711,9 @@ try {
         # this repository, so this script only describes it. RotorLab signs:
         #   1. the Windows installer with an Authenticode certificate;
         #   2. the APK with RotorLab's Android signing key (zipalign, apksigner);
-        #   3. SHA256SUMS.txt, the SHA-256 of the signed installer and APK;
-        #   4. a detached signature (.sig) for each of those three files, made with
+        #   3. SHA256SUMS.txt, the SHA-256 of the signed installer, the signed APK
+        #      and the AppImage;
+        #   4. a detached signature (.sig) for each of those files, made with
         #      the RotorLab release key: ssh-keygen -Y sign -n rotorlab-release.
         # Anyone can check a release with the public key line in README.md, with no
         # secret: ssh-keygen -Y verify -f allowed_signers -I release@rotorlab.app

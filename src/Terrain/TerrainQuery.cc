@@ -185,7 +185,13 @@ bool TerrainAtCoordinateQuery::getAltitudesForCoordinates(const QList<QGeoCoordi
 
 void TerrainAtCoordinateQuery::signalTerrainData(bool success, const QList<double> &heights)
 {
-    emit terrainDataReceived(success, heights);
+    // A height of NaN means unknown ground. No consumer can use a partial answer safely, so report it as not available.
+    if (success && TerrainQuery::hasUnknownHeight(heights)) {
+        qCWarning(TerrainQueryLog) << Q_FUNC_INFO << "unknown terrain height in result, reporting failure";
+        emit terrainDataReceived(false, QList<double>());
+    } else {
+        emit terrainDataReceived(success, heights);
+    }
     if (_autoDelete) {
         deleteLater();
     }
@@ -219,7 +225,14 @@ void TerrainPathQuery::_pathHeights(bool success, double distanceBetween, double
     pathHeightInfo.distanceBetween = distanceBetween;
     pathHeightInfo.finalDistanceBetween = finalDistanceBetween;
     pathHeightInfo.heights = heights;
-    emit terrainDataReceived(success, pathHeightInfo);
+    if (success && TerrainQuery::hasUnknownHeight(heights)) {
+        // A height of NaN means unknown ground: the profile shows the segment as missing terrain instead of a made-up height
+        qCWarning(TerrainQueryLog) << Q_FUNC_INFO << "unknown terrain height in path, reporting failure";
+        pathHeightInfo.heights.clear();
+        emit terrainDataReceived(false, pathHeightInfo);
+    } else {
+        emit terrainDataReceived(success, pathHeightInfo);
+    }
     if (_autoDelete) {
         deleteLater();
     }

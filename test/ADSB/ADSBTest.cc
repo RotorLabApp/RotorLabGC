@@ -74,7 +74,18 @@ void ADSBTest::_adsbVehicleManagerTest()
     ADSBVehicleManager* const manager = ADSBVehicleManager::instance();
     QVERIFY(manager);
     QVERIFY(manager->adsbVehicles());
-    QCOMPARE(manager->adsbVehicles()->count(), 0);
+
+    // The manager is a process-wide singleton. MockLink sends ADSB_VEHICLE
+    // messages (ICAO 12345 and up), so a test that ran a MockLink vehicle
+    // shortly before this one (TakMarkerTest since 5.1.2) leaves simulated
+    // aircraft here until they expire. Count from what is already present
+    // and use an ICAO address MockLink never sends.
+    const int baseline = manager->adsbVehicles()->count();
+    for (int i = 0; i < baseline; ++i) {
+        const ADSBVehicle* const existing = manager->adsbVehicles()->value<ADSBVehicle*>(i);
+        QVERIFY(existing);
+        QVERIFY(existing->icaoAddress() != 1);
+    }
 
     ADSB::VehicleInfo_t vehicleInfo;
     vehicleInfo.icaoAddress = 1;
@@ -85,5 +96,5 @@ void ADSBTest::_adsbVehicleManagerTest()
     vehicleInfo.availableFlags = ADSB::LocationAvailable;
 
     manager->adsbVehicleUpdate(vehicleInfo);
-    QCOMPARE(manager->adsbVehicles()->count(), 1);
+    QCOMPARE(manager->adsbVehicles()->count(), baseline + 1);
 }

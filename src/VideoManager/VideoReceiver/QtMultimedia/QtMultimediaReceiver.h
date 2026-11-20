@@ -11,15 +11,16 @@
 
 #include <QtCore/QLoggingCategory>
 #include <QtCore/QMetaObject>
+#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtCore/QTimer>
+#include <QtMultimedia/QVideoSink>
 
 #include "VideoReceiver.h"
 
 Q_DECLARE_LOGGING_CATEGORY(QtMultimediaReceiverLog)
 
 class QMediaPlayer;
-class QVideoSink;
 class QMediaCaptureSession;
 class QMediaRecorder;
 class QRhi;
@@ -51,12 +52,12 @@ public slots:
 protected:
     QTimer _frameTimer;
     QMediaPlayer *_mediaPlayer = nullptr;
-    QVideoSink *_videoSink = nullptr;
+    QPointer<QVideoSink> _videoSink;   ///< G84: owned by the QML VideoOutput, which can be destroyed
     QMediaCaptureSession *_captureSession = nullptr;
     QMediaRecorder *_mediaRecorder = nullptr;
     QMetaObject::Connection _videoSizeUpdater;
     QMetaObject::Connection _videoFrameUpdater;
     QRhi *_rhi = nullptr;
-    const QIODevice *_streamDevice;
-    QQuickVideoOutput *_videoOutput = nullptr;
+    const QIODevice *_streamDevice = nullptr;
+    QQuickVideoOutput *_videoOutput = nullptr;   ///< used by UVCReceiver
 };

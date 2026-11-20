@@ -11,7 +11,7 @@
 
 /****************************************************************************
  *
- * RotorLab GC custom build plugin. Modified by RotorLab Inc, 2026, from
+ * RotorLab GC custom build plugin. Modified by RotorLab, Inc., 2026, from
  * custom-example/src/CustomPlugin.h.
  *
  * Branding-only QGCCorePlugin override: app name, brand images and the
@@ -27,6 +27,8 @@
 #include "QGCCorePlugin.h"
 
 class QQmlApplicationEngine;
+class LicenseManager;
+class LinkManager;
 
 Q_DECLARE_LOGGING_CATEGORY(CustomLog)
 
@@ -40,12 +42,20 @@ public:
 
     static QGCCorePlugin *instance();
 
+    /// No link behind the gate: LinkManager follows
+    /// LicenseManager::linksAllowed() from now on. Called by init(); tests
+    /// call it with their own LicenseManager.
+    static void wireLinkGate(LicenseManager *license, LinkManager *links);
+
     // Overrides from QGCCorePlugin
+    void init() final;
     void cleanup() final;
     QString brandImageIndoor() const final;
     QString brandImageOutdoor() const final;
     void paletteOverride(const QString &colorName, QGCPalette::PaletteColorInfo_t &colorInfo) final;
     QQmlApplicationEngine *createQmlApplicationEngine(QObject *parent) final;
+    /// G95/G109: the stock receiver, noted so recording and relay can find its packet tap.
+    VideoReceiver *createVideoReceiver(QObject *parent) final;
 
 private:
     QQmlApplicationEngine *_qmlEngine = nullptr;

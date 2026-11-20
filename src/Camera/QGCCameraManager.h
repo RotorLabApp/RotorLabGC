@@ -64,6 +64,7 @@ public:
     class CameraStruct : public QObject {
     public:
         CameraStruct(QObject* parent, uint8_t compID_, Vehicle* vehicle);
+        ~CameraStruct();
         QElapsedTimer lastHeartbeat;
         bool        infoReceived    = false;
         uint8_t     compID          = 0;

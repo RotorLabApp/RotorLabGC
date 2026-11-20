@@ -145,7 +145,11 @@ void TerrainProtocolHandler::_sendTerrainData(const QGeoCoordinate &swCorner, ui
     }
 
     if (error) {
-        qCWarning(TerrainProtocolHandlerLog) << Q_FUNC_INFO << "TerrainAtCoordinateQuery::getAltitudesForCoordinates failed";
+        // At least one height in this 4x4 block is unknown (a data void). Retrying would never help and would starve the
+        // other blocks of the request, so drop this block: its bit is cleared, nothing (no NaN, no 0) is sent for it,
+        // and the next set bit is tried on the next timer tick. The vehicle asks again if it still needs the block.
+        qCWarning(TerrainProtocolHandlerLog) << Q_FUNC_INFO << "unknown terrain height in block, not sending it. Grid bit:" << gridBit;
+        _currentTerrainRequest.mask &= ~(1ull << gridBit);
         return;
     }
 

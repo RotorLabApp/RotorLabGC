@@ -4,7 +4,7 @@ The words GC uses, and how the pieces fit. Everything on this page describes Rot
 
 ## GC is QGroundControl, plus RotorLab's features
 
-RotorLab GC is QGroundControl with RotorLab's features added. Flying, planning, video, guided commands, vehicle setup and the MAVLink connection work as they do in QGroundControl. RotorLab's features sit on top: TAK and ATAK, the RotorLab Connector, the crew screen, the station queue, the RotorLab Server connection, the license check and the full-window settings layout.
+RotorLab GC is QGroundControl with RotorLab's features added. Flying, planning, guided commands, vehicle setup and the MAVLink connection work as they do in QGroundControl. RotorLab's features sit on top: TAK and ATAK, the RotorLab Connector, the crew screen, the station queue, the RotorLab Server connection, the license check and the full-window settings layout.
 
 GC records and warns. It never authorizes a flight. Nothing GC shows (a readiness word, a currency warning, a green state) is permission to fly, and nothing in RotorLab's features holds up arming or a launch.
 
@@ -51,7 +51,7 @@ The crew screen shows RotorLab's own words for each aircraft (for example "Limit
 
 ## TAK and ATAK
 
-GC publishes each connected aircraft to your TAK server as a Cursor on Target air track, and can act on ATAK map markers named like `GOTO 2 ALT 400 SPD 5`, but only the verbs the station has switched on, and only while its three Command By ATAK switches are on. Every verb starts off. The [RotorLab GC ATAK and TAK Field Guide](https://github.com/RotorLabApp/rotorlab-gc-tak-guide) covers every switch, verb, check and message.
+GC publishes each connected aircraft to your TAK server as a Cursor on Target air track, and can act on ATAK map markers named like `GOTO ALPHA-2 ALT 400 SPD 5` (from 5.4.0 a marker names the station and the aircraft), but only the verbs the station has switched on, and only while its three Command By ATAK switches are on. Every verb starts off. The [RotorLab GC ATAK and TAK Field Guide](https://github.com/RotorLabApp/rotorlab-gc-tak-guide) covers every switch, verb, check and message.
 
 ## RotorLab Server (Fleet Server role)
 

@@ -269,6 +269,11 @@ public:
     /// The operator-facing sentence for a failed enroll reply.
     static QString enrollErrorText(const FleetReply &r, const QString &base);
 
+    /// G40: the Fleet Server is this station's route to ATAK while enrolled
+    /// and not suspended (the TAK page is hidden then). Returns +1 when it has
+    /// just become the route, -1 when it has just stopped being it, else 0.
+    static int takRouteEdge(bool wasRoute, bool enrolled, bool suspended);
+
     // --- QML actions ---
 
     /// Redeem an enrollment code. `address` is what the operator typed;
@@ -326,6 +331,8 @@ private:
     bool _handleCommon(const FleetReply &r);
 
     void _scheduleReconnect();
+    /// G40: hand the ATAK route over when the Fleet Server becomes it.
+    void _takHandOff();
     void _clearReconnect();
 
     FleetClient   *_client = nullptr;
@@ -333,6 +340,7 @@ private:
     FleetChecklists *_checklists = nullptr;
     FleetLogs       *_logs = nullptr;
     bool             _suspended = false;   ///< the RotorLab Connector is active instead
+    bool             _takRoute = false;    ///< G40: the Fleet Server is the route to ATAK
     State          _state = NotConnected;
 
     QTimer _rosterTimer;        ///< periodic roster refresh

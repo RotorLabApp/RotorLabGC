@@ -10,12 +10,23 @@
 #include "UnitTestList.h"
 #include "UnitTest.h"
 #include "QGCLoggingCategory.h"
+#ifdef QGC_CUSTOM_BUILD
+#include "Credential.h"
+#endif
 
 #ifdef QGC_CUSTOM_BUILD
 #include "ConnectorIntegrationTest.h"
 #include "CredentialTest.h"
 #include "FleetEnrollTest.h"
+#include "LicenseLinkGateTest.h"
 #include "LicenseRecheckTest.h"
+#include "LicenseRecordTest.h"
+#include "LicenseStubTest.h"
+#include "LogCollectPolicyTest.h"
+#ifdef RL_PLAN3D
+#include "Plan3DTest.h"
+#include "Plan3DEditTest.h"
+#endif
 #include "RotorLabCrewTest.h"
 #include "RotorLabFilingTest.h"
 #include "RotorLabRosterTest.h"
@@ -23,7 +34,33 @@
 #include "RunGuardTest.h"
 #include "TakEnrollWireTest.h"
 #include "TakManagerTest.h"
+#include "TakMarkerTest.h"
 #include "TakPolicyTest.h"
+#include "PlanCorpusOpenTest.h"
+#include "VideoSinkTest.h"
+// G95 local recording: the tests are registered only where they exist
+#if __has_include("VideoUploaderTest.h")
+#define RL_G95_RECORD_TESTS
+#include "RecordingRecoveryTest.h"
+#include "VideoUploaderTest.h"
+#ifdef QGC_FFMPEG_STREAMING
+#include "Fmp4MuxerTest.h"
+#include "RecordingWriterTest.h"
+#include "TimeMapWriterTest.h"
+#endif
+#endif
+// G109 live relay: the tests are registered only where they exist
+#if defined(QGC_FFMPEG_STREAMING) && __has_include("LiveSessionTest.h")
+#define RL_G109_RELAY_TESTS
+#include "EncoderProbeTest.h"
+#include "LiveFragmenterTest.h"
+#include "LiveSessionTest.h"
+#include "RelayEncoderTest.h"
+#endif
+#ifdef RL_PLAN3D
+#include "Plan3DGroundTest.h"
+#include "Plan3DParityTest.h"
+#endif
 #endif
 
 // ADSB
@@ -76,6 +113,10 @@
 #include "MissionItemTest.h"
 #include "MissionManagerTest.h"
 #include "MissionSettingsTest.h"
+#include "LandingSequenceTest.h"
+#include "GeoFenceBreachReturnTest.h"
+#include "PlanCorpusRoundTripTest.h"
+#include "PlanManagerTransferTest.h"
 #include "PlanMasterControllerTest.h"
 #include "QGCMapPolygonTest.h"
 #include "QGCMapPolylineTest.h"
@@ -92,6 +133,7 @@
 #include "ComponentInformationTranslationTest.h"
 
 // QmlControls
+#include "TerrainProfileLabelsTest.h"
 
 // Terrain
 #include "TerrainQueryTest.h"
@@ -110,6 +152,15 @@
 #include "GeoTest.h"
 // Shape
 #include "ShapeTest.h"
+
+// VideoManager (G88)
+#include "FFmpegSourceTest.h"
+#include "RtpDepacketizerTest.h"
+#include "VideoPacketTapTest.h"
+#ifdef QGC_FFMPEG_STREAMING
+#include "FFmpegLoopbackBench.h"
+#include "FFmpegReceiverTest.h"
+#endif
 
 // Vehicle
 // Components
@@ -137,7 +188,15 @@ int runTests(bool stress, QStringView unitTestOptions)
     UT_REGISTER_TEST_STANDALONE(ConnectorIntegrationTest)
     UT_REGISTER_TEST(CredentialTest)
     UT_REGISTER_TEST(FleetEnrollTest)
+    UT_REGISTER_TEST(LicenseLinkGateTest)
     UT_REGISTER_TEST(LicenseRecheckTest)
+    UT_REGISTER_TEST(LicenseRecordTest)
+    UT_REGISTER_TEST_STANDALONE(LicenseStubTest)
+    UT_REGISTER_TEST(LogCollectPolicyTest)
+#ifdef RL_PLAN3D
+    UT_REGISTER_TEST(Plan3DTest)
+    UT_REGISTER_TEST(Plan3DEditTest)
+#endif
     UT_REGISTER_TEST(RotorLabCrewTest)
     UT_REGISTER_TEST(RotorLabFilingTest)
     UT_REGISTER_TEST(RotorLabRosterTest)
@@ -145,7 +204,29 @@ int runTests(bool stress, QStringView unitTestOptions)
     UT_REGISTER_TEST(RunGuardTest)
     UT_REGISTER_TEST(TakEnrollWireTest)
     UT_REGISTER_TEST(TakManagerTest)
+    UT_REGISTER_TEST(TakMarkerTest)
     UT_REGISTER_TEST(TakPolicyTest)
+    UT_REGISTER_TEST(PlanCorpusOpenTest)
+    UT_REGISTER_TEST(VideoSinkTest)
+#ifdef RL_G95_RECORD_TESTS
+    UT_REGISTER_TEST(RecordingRecoveryTest)
+    UT_REGISTER_TEST(VideoUploaderTest)
+#ifdef QGC_FFMPEG_STREAMING
+    UT_REGISTER_TEST(Fmp4MuxerTest)
+    UT_REGISTER_TEST(RecordingWriterTest)
+    UT_REGISTER_TEST(TimeMapWriterTest)
+#endif
+#endif
+#ifdef RL_G109_RELAY_TESTS
+    UT_REGISTER_TEST(EncoderProbeTest)
+    UT_REGISTER_TEST(LiveFragmenterTest)
+    UT_REGISTER_TEST(LiveSessionTest)
+    UT_REGISTER_TEST(RelayEncoderTest)
+#endif
+#ifdef RL_PLAN3D
+    UT_REGISTER_TEST(Plan3DGroundTest)
+    UT_REGISTER_TEST(Plan3DParityTest)
+#endif
 #endif
 
     // ADSB
@@ -196,6 +277,10 @@ int runTests(bool stress, QStringView unitTestOptions)
     UT_REGISTER_TEST(MissionItemTest)
     UT_REGISTER_TEST(MissionManagerTest)
     UT_REGISTER_TEST(MissionSettingsTest)
+    UT_REGISTER_TEST(LandingSequenceTest)       // RotorLab GC 5.1.2, G75
+    UT_REGISTER_TEST(GeoFenceBreachReturnTest)  // RotorLab GC 5.2.0, G86
+    UT_REGISTER_TEST(PlanCorpusRoundTripTest)   // RotorLab GC 5.1.2, G70 and G71
+    UT_REGISTER_TEST(PlanManagerTransferTest)   // RotorLab GC 5.3.0, G92 and G93
     UT_REGISTER_TEST(PlanMasterControllerTest)
     UT_REGISTER_TEST(QGCMapPolygonTest)
     UT_REGISTER_TEST(QGCMapPolylineTest)
@@ -210,6 +295,7 @@ int runTests(bool stress, QStringView unitTestOptions)
     // qgcunittest
 
     // QmlControls
+    UT_REGISTER_TEST(TerrainProfileLabelsTest)  // RotorLab GC 5.1.2, G78
 
     // Terrain
     UT_REGISTER_TEST(TerrainQueryTest)
@@ -228,6 +314,15 @@ int runTests(bool stress, QStringView unitTestOptions)
     UT_REGISTER_TEST(GeoTest)
     // Shape
     UT_REGISTER_TEST(ShapeTest)
+
+    // VideoManager (G88)
+    UT_REGISTER_TEST(FFmpegSourceTest)
+    UT_REGISTER_TEST(RtpDepacketizerTest)
+    UT_REGISTER_TEST(VideoPacketTapTest)
+#ifdef QGC_FFMPEG_STREAMING
+    UT_REGISTER_TEST(FFmpegReceiverTest)
+    UT_REGISTER_TEST_STANDALONE(FFmpegLoopbackBench)
+#endif
 
     // Vehicle
     // Components
@@ -248,6 +343,15 @@ int runTests(bool stress, QStringView unitTestOptions)
     // UT_REGISTER_TEST(TCPLinkTest)
 
     int result = 0;
+
+    // G105: entries the tests saved under unit test names are erased when the
+    // run ends, also after a failure (a test run never enters the event loop,
+    // so nothing else would clean them up).
+#ifdef QGC_CUSTOM_BUILD
+    struct EraseUnitTestAccounts {
+        ~EraseUnitTestAccounts() { Credential::eraseUnitTestAccounts(); }
+    } eraseAtEnd;
+#endif
 
     for (int i=0; i < (stress ? 20 : 1); i++) {
         // Run the test

@@ -22,6 +22,11 @@ inline constexpr bool verifyPeer = true;
 // reported sender is on the station's list; an empty list sends nothing.
 inline constexpr bool approvedOnly = true;
 
+// "Share this station's position with the TAK server": off. The GCS beacon
+// still goes out, with the CoT unknown point instead of the station's
+// location. An upgraded install that never saved this key is off as well.
+inline constexpr bool shareStationPosition = false;
+
 // Command By ATAK: every verb is opt in, per verb, on the TAK page.
 // Movement and recovery (GOTO, RTL, LAND, HOLD, ALTHOLD) ship off as well as
 // launch and seize (GUIDED, ARM, DISARM, TKOFF).

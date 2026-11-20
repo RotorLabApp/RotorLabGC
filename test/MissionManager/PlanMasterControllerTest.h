@@ -11,6 +11,8 @@
 
 #include "UnitTest.h"
 
+#include <QtCore/QJsonArray>
+
 class PlanMasterController;
 
 class PlanMasterControllerTest : public UnitTest
@@ -27,6 +29,13 @@ private slots:
     void _testMissionFileLoad(void);
     void _testMissionPlannerFileLoad(void);
     void _testActiveVehicleChanged(void);
+    void _testPlanVehicleClassMatches(void);
+    void _testVtolPlanOnQuadPlaneNoMismatch(void);
+    void _testNullNumberRefusedAtLoad(void);
+
+private:
+    void _connectArduPlaneMockLink(void);
+    QString _writeTestPlan(const QString& dirPath, int vehicleType, const QJsonArray& items = QJsonArray(), const QString& fileName = QString());
 
 private:
     PlanMasterController*   _masterController;

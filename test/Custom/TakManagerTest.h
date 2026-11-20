@@ -30,10 +30,31 @@ private slots:
     void _presenceBeforeFirstFix();
     void _directModeAnnouncesToServer();
     void _presenceAtOnceOnChange();
+    void _sharePositionDefaultOff();        ///< m4086
+    void _beaconWithoutPositionWhenOff();   ///< m4086
+    void _beaconPositionWhenOn();           ///< m4086
+    void _conflictSeenWithSharingOff();     ///< m4086
     void _ownUidsExact();
     void _openSenderWarning();
     void _pilotListKinds();
     void _fingerprintPinning();
     void _newInstallDefaults();
     void _savedSettingsKept();
+
+    // GC 5.1.2, TAK link
+    void _sendToFollowsFleetCallsign();     ///< G40 (i)
+    void _fleetJoinClosesLink();            ///< G40 (ii)
+    void _verifyOffLogged();                ///< G40 (iii)
+    void _passwordMovedToKeyStore();        ///< G41
+    void _passwordNeverInSettings();        ///< G41
+    void _clientKeyOwnerOnly();             ///< G41
+    void _statusAfterFailedConnect();       ///< G45
+    void _receiveBufferBounded();           ///< G46, S2
+    void _keyFileFailsClosed();             ///< G41 review S5
+    void _plainPasswordKeptUntilStored();   ///< G41 review S6
+    void _pendingPasswordCleared();         ///< G41 review R2
+    void _pendingPasswordChanged();         ///< G41 review R2
+    void _keyReplaceFailureCleansUp();      ///< G41 review R4
+    void _disconnectClearsReceive();        ///< G46 review R5
+    void _storeRefusalNamesItsCause();      ///< G41: armed text only when armed
 };

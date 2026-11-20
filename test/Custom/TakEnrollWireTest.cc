@@ -2,6 +2,7 @@
 
 #include "tak/TakManager.h"
 #include "tak/TakPolicy.h"
+#include "rotorlab/Credential.h"
 
 #include <QtCore/QFile>
 #include <QtCore/QPointer>
@@ -32,6 +33,9 @@ void TakEnrollWireTest::init()
 void TakEnrollWireTest::cleanup()
 {
     clearTakSettings();
+    // Accepting a fingerprint saves the settings, and with them the TAK
+    // password, under the per-process unit-test key-store name (G41).
+    Credential::erase(TakManager::passwordAccount());
     UnitTest::cleanup();
 }
 

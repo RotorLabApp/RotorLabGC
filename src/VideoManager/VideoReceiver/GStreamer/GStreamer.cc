@@ -145,17 +145,19 @@ void _qtGstLog(GstDebugCategory *category,
     QMessageLogger log(file, line, function);
 
     char *object_info = gst_info_strdup_printf("%" GST_PTR_FORMAT, static_cast<void*>(object));
+    // G84: GStreamer messages can contain the stream URL with its user name and password
+    const QByteArray redacted = VideoReceiver::redactedUri(QString::fromUtf8(gst_debug_message_get(message))).toUtf8();
 
     switch (level) {
     case GST_LEVEL_ERROR:
-        log.critical(GStreamerAPILog, "%s %s", object_info, gst_debug_message_get(message));
+        log.critical(GStreamerAPILog, "%s %s", object_info, redacted.constData());
         break;
     case GST_LEVEL_WARNING:
-        log.warning(GStreamerAPILog, "%s %s", object_info, gst_debug_message_get(message));
+        log.warning(GStreamerAPILog, "%s %s", object_info, redacted.constData());
         break;
     case GST_LEVEL_FIXME:
     case GST_LEVEL_INFO:
-        log.info(GStreamerAPILog, "%s %s", object_info, gst_debug_message_get(message));
+        log.info(GStreamerAPILog, "%s %s", object_info, redacted.constData());
         break;
     case GST_LEVEL_DEBUG:
 #ifdef QT_DEBUG
@@ -163,7 +165,7 @@ void _qtGstLog(GstDebugCategory *category,
     case GST_LEVEL_TRACE:
     case GST_LEVEL_MEMDUMP:
 #endif
-        log.debug(GStreamerAPILog, "%s %s", object_info, gst_debug_message_get(message));
+        log.debug(GStreamerAPILog, "%s %s", object_info, redacted.constData());
         break;
     default:
         break;
@@ -419,6 +421,16 @@ bool initialize()
 
 void *createVideoSink(QQuickItem *widget, QObject *parent)
 {
+    // G101 (like G83 for Qt Multimedia): qml6glsink treats its "widget" as a Qt6GLVideoItem without
+    // checking. Any other item (a plain QQuickItem, the VideoItemStub) crashes inside the sink, so
+    // it is refused here: no sink, video stays off, no crash.
+    if (widget && !widget->inherits("Qt6GLVideoItem")) {
+        qCCritical(GStreamerLog) << "createVideoSink: video widget" << widget->objectName()
+                                 << "is a" << widget->metaObject()->className()
+                                 << "and not a GStreamer GL video item (Qt6GLVideoItem); no video sink";
+        return nullptr;
+    }
+
     GstElement *videoSinkBin = gst_element_factory_make("qgcvideosinkbin", NULL);
     if (videoSinkBin) {
         if (widget) {

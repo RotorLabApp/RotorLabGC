@@ -56,7 +56,7 @@ void GstVideoReceiver::start(uint32_t timeout)
     }
 
     if (_pipeline) {
-        qCDebug(GstVideoReceiverLog) << "Already running!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Already running!" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartComplete(STATUS_INVALID_STATE); });
         return;
     }
@@ -70,7 +70,7 @@ void GstVideoReceiver::start(uint32_t timeout)
     _timeout = timeout;
     _buffer = lowLatency() ? -1 : 0;
 
-    qCDebug(GstVideoReceiverLog) << "Starting" << _uri << ", lowLatency" << lowLatency() << ", timeout" << _timeout;
+    qCDebug(GstVideoReceiverLog) << "Starting" << redactedUri(_uri) << ", lowLatency" << lowLatency() << ", timeout" << _timeout;
 
     _endOfStream = false;
 
@@ -218,7 +218,7 @@ void GstVideoReceiver::start(uint32_t timeout)
         _dispatchSignal([this]() { emit onStartComplete(STATUS_FAIL); });
     } else {
         GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-started");
-        qCDebug(GstVideoReceiverLog) << "Started" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Started" << redactedUri(_uri);
 
         _dispatchSignal([this]() { emit onStartComplete(STATUS_OK); });
     }
@@ -236,7 +236,7 @@ void GstVideoReceiver::stop()
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "Stopping" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Stopping" << redactedUri(_uri);
 
     if (_teeProbeId != 0) {
         GstPad *sinkpad = gst_element_get_static_pad(_tee, "sink");
@@ -308,14 +308,14 @@ void GstVideoReceiver::stop()
 
         if (_streaming) {
             _streaming = false;
-            qCDebug(GstVideoReceiverLog) << "Streaming stopped" << _uri;
+            qCDebug(GstVideoReceiverLog) << "Streaming stopped" << redactedUri(_uri);
             _dispatchSignal([this]() { emit streamingChanged(_streaming); });
         } else {
-            qCDebug(GstVideoReceiverLog) << "Streaming did not start" << _uri;
+            qCDebug(GstVideoReceiverLog) << "Streaming did not start" << redactedUri(_uri);
         }
     }
 
-    qCDebug(GstVideoReceiverLog) << "Stopped" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Stopped" << redactedUri(_uri);
 
     _dispatchSignal([this]() { emit onStopComplete(STATUS_OK); });
 }
@@ -323,7 +323,7 @@ void GstVideoReceiver::stop()
 void GstVideoReceiver::startDecoding(void *sink)
 {
     if (!sink) {
-        qCCritical(GstVideoReceiverLog) << "VideoSink is NULL" << _uri;
+        qCCritical(GstVideoReceiverLog) << "VideoSink is NULL" << redactedUri(_uri);
         return;
     }
 
@@ -332,10 +332,10 @@ void GstVideoReceiver::startDecoding(void *sink)
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "Starting decoding" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Starting decoding" << redactedUri(_uri);
 
     if (!_widget) {
-        qCDebug(GstVideoReceiverLog) << "Video Widget is NULL" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Video Widget is NULL" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartDecodingComplete(STATUS_FAIL); });
         return;
     }
@@ -345,7 +345,7 @@ void GstVideoReceiver::startDecoding(void *sink)
     }
 
     if (_videoSink || _decoding) {
-        qCDebug(GstVideoReceiverLog) << "Already decoding!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Already decoding!" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartDecodingComplete(STATUS_INVALID_STATE); });
         return;
     }
@@ -353,7 +353,7 @@ void GstVideoReceiver::startDecoding(void *sink)
     GstElement *videoSink = GST_ELEMENT(sink);
     GstPad *pad = gst_element_get_static_pad(videoSink, "sink");
     if (!pad) {
-        qCCritical(GstVideoReceiverLog) << "Unable to find sink pad of video sink" << _uri;
+        qCCritical(GstVideoReceiverLog) << "Unable to find sink pad of video sink" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartDecodingComplete(STATUS_FAIL); });
         return;
     }
@@ -375,7 +375,7 @@ void GstVideoReceiver::startDecoding(void *sink)
     }
 
     if (!_addDecoder(_decoderValve)) {
-        qCCritical(GstVideoReceiverLog) << "_addDecoder() failed" << _uri;
+        qCCritical(GstVideoReceiverLog) << "_addDecoder() failed" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartDecodingComplete(STATUS_FAIL); });
         return;
     }
@@ -384,7 +384,7 @@ void GstVideoReceiver::startDecoding(void *sink)
                  "drop", FALSE,
                  nullptr);
 
-    qCDebug(GstVideoReceiverLog) << "Decoding started" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Decoding started" << redactedUri(_uri);
 
     _dispatchSignal([this]() { emit onStartDecodingComplete(STATUS_OK); });
 }
@@ -396,10 +396,10 @@ void GstVideoReceiver::stopDecoding()
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "Stopping decoding" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Stopping decoding" << redactedUri(_uri);
 
     if (!_pipeline || !_decoding) {
-        qCDebug(GstVideoReceiverLog) << "Not decoding!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Not decoding!" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStopDecodingComplete(STATUS_INVALID_STATE); });
         return;
     }
@@ -425,25 +425,25 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "Starting recording" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Starting recording" << redactedUri(_uri);
 
     if (!_pipeline) {
-        qCDebug(GstVideoReceiverLog) << "Streaming is not active!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Streaming is not active!" << redactedUri(_uri);
         _dispatchSignal([this](){ emit onStartRecordingComplete(STATUS_INVALID_STATE); });
         return;
     }
 
     if (_recording) {
-        qCDebug(GstVideoReceiverLog) << "Already recording!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Already recording!" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_INVALID_STATE); });
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "New video file:" << videoFile << _uri;
+    qCDebug(GstVideoReceiverLog) << "New video file:" << videoFile << redactedUri(_uri);
 
     _fileSink = _makeFileSink(videoFile, format);
     if (!_fileSink) {
-        qCCritical(GstVideoReceiverLog) << "_makeFileSink() failed" << _uri;
+        qCCritical(GstVideoReceiverLog) << "_makeFileSink() failed" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
         return;
     }
@@ -455,7 +455,7 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
     gst_bin_add(GST_BIN(_pipeline), _fileSink);
 
     if (!gst_element_link(_recorderValve, _fileSink)) {
-        qCCritical(GstVideoReceiverLog) << "Failed to link valve and file sink" << _uri;
+        qCCritical(GstVideoReceiverLog) << "Failed to link valve and file sink" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
         return;
     }
@@ -469,7 +469,7 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
     // This will ensure the first frame is a keyframe at t=0, and decoding can begin immediately on playback
     GstPad *probepad = gst_element_get_static_pad(_recorderValve, "src");
     if (!probepad) {
-        qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << _uri;
+        qCCritical(GstVideoReceiverLog) << "gst_element_get_static_pad() failed" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStartRecordingComplete(STATUS_FAIL); });
         return;
     }
@@ -483,7 +483,7 @@ void GstVideoReceiver::startRecording(const QString &videoFile, FILE_FORMAT form
 
     _recordingOutput = videoFile;
     _recording = true;
-    qCDebug(GstVideoReceiverLog) << "Recording started" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Recording started" << redactedUri(_uri);
     _dispatchSignal([this]() {
         emit onStartRecordingComplete(STATUS_OK);
         emit recordingChanged(_recording);
@@ -497,10 +497,10 @@ void GstVideoReceiver::stopRecording()
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "Stopping recording" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Stopping recording" << redactedUri(_uri);
 
     if (!_pipeline || !_recording) {
-        qCDebug(GstVideoReceiverLog) << "Not recording!" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Not recording!" << redactedUri(_uri);
         _dispatchSignal([this]() { emit onStopRecordingComplete(STATUS_INVALID_STATE); });
         return;
     }
@@ -526,7 +526,7 @@ void GstVideoReceiver::takeScreenshot(const QString &imageFile)
         return;
     }
 
-    qCDebug(GstVideoReceiverLog) << "taking screenshot" << _uri;
+    qCDebug(GstVideoReceiverLog) << "taking screenshot" << redactedUri(_uri);
 
     // FIXME: record screenshot here
     _dispatchSignal([this]() { emit onTakeScreenshotComplete(STATUS_NOT_IMPLEMENTED); });
@@ -546,7 +546,7 @@ void GstVideoReceiver::_watchdog()
 
         qint64 elapsed = now - _lastSourceFrameTime;
         if (elapsed > _timeout) {
-            qCDebug(GstVideoReceiverLog) << "Stream timeout, no frames for" << elapsed << _uri;
+            qCDebug(GstVideoReceiverLog) << "Stream timeout, no frames for" << elapsed << redactedUri(_uri);
             _dispatchSignal([this]() { emit timeout(); });
             stop();
         }
@@ -558,7 +558,7 @@ void GstVideoReceiver::_watchdog()
 
             elapsed = now - _lastVideoFrameTime;
             if (elapsed > (_timeout * 2)) {
-                qCDebug(GstVideoReceiverLog) << "Video decoder timeout, no frames for" << elapsed << _uri;
+                qCDebug(GstVideoReceiverLog) << "Video decoder timeout, no frames for" << elapsed << redactedUri(_uri);
                 _dispatchSignal([this]() { emit timeout(); });
                 stop();
             }
@@ -649,7 +649,7 @@ GstElement *GstVideoReceiver::_makeSource(const QString &input)
     do {
         if (isRtsp) {
             if (!GStreamer::is_valid_rtsp_uri(input.toUtf8().constData())) {
-                qCCritical(GstVideoReceiverLog) << "Invalid RTSP URI:" << input;
+                qCCritical(GstVideoReceiverLog) << "Invalid RTSP URI:" << redactedUri(input);
                 break;
             }
 
@@ -895,7 +895,7 @@ void GstVideoReceiver::_onNewSourcePad(GstPad *pad)
 
     if (!_streaming) {
         _streaming = true;
-        qCDebug(GstVideoReceiverLog) << "Streaming started" << _uri;
+        qCDebug(GstVideoReceiverLog) << "Streaming started" << redactedUri(_uri);
         _dispatchSignal([this]() { emit streamingChanged(_streaming); });
     }
 
@@ -915,12 +915,12 @@ void GstVideoReceiver::_onNewSourcePad(GstPad *pad)
                  "drop", FALSE,
                  nullptr);
 
-    qCDebug(GstVideoReceiverLog) << "Decoding started" << _uri;
+    qCDebug(GstVideoReceiverLog) << "Decoding started" << redactedUri(_uri);
 }
 
 void GstVideoReceiver::_onNewDecoderPad(GstPad *pad)
 {
-    qCDebug(GstVideoReceiverLog) << "_onNewDecoderPad" << _uri;
+    qCDebug(GstVideoReceiverLog) << "_onNewDecoderPad" << redactedUri(_uri);
 
     GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GST_DEBUG_GRAPH_SHOW_ALL, "pipeline-with-new-decoder-pad");
 
@@ -1010,7 +1010,7 @@ bool GstVideoReceiver::_addVideoSink(GstPad *pad)
     }
 
     g_object_set(_videoSink,
-                 "widget", _widget,
+                 "widget", _widget.data(),
                  "sync", (_buffer >= 0),
                  NULL);
 
@@ -1192,12 +1192,12 @@ gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gp
         gst_message_parse_error(msg, &error, &debug);
 
         if (debug) {
-            qCDebug(GstVideoReceiverLog) << "GStreamer debug:" << debug;
+            qCDebug(GstVideoReceiverLog) << "GStreamer debug:" << redactedUri(QString::fromUtf8(debug));
             g_clear_pointer(&debug, g_free);
         }
 
         if (error) {
-            qCCritical(GstVideoReceiverLog) << "GStreamer error:" << error->message;
+            qCCritical(GstVideoReceiverLog) << "GStreamer error:" << redactedUri(QString::fromUtf8(error->message));
             g_clear_error(&error);
         }
 

@@ -358,8 +358,7 @@ void RotorLabCrewTest::_picSorties()
 
 void RotorLabCrewTest::_picWording()
 {
-    // The regime's own term (pic-new-words.md, reg-faa 6 and 9; reg-uk,
-    // reg-eu, reg-canada build confirmation).
+    // The regime's own term (US, UK, EU and Canada wording).
     QCOMPARE(RotorLabPic::pilotWord(QStringLiteral("part107"), QString()), QStringLiteral("Remote pilot in command"));
     QCOMPARE(RotorLabPic::pilotWord(QString(), QStringLiteral("US")), QStringLiteral("Remote pilot in command"));
     QCOMPARE(RotorLabPic::pilotWord(QStringLiteral("public_aircraft"), QStringLiteral("US")), QStringLiteral("Pilot"));

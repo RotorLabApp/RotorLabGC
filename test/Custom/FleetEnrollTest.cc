@@ -2,6 +2,7 @@
 
 #include "fleet/FleetConnector.h"
 #include "fleet/FleetStore.h"
+#include "tak/TakManager.h"
 #include "net/HttpClient.h"
 
 #include <QtCore/QCryptographicHash>
@@ -489,4 +490,70 @@ void FleetEnrollTest::_liveEnroll()
     // locally. The station stays in the server console.
     QTRY_COMPARE_WITH_TIMEOUT(conn.state(), FleetConnector::Connected, 15000);
     conn.disconnectFromServer();
+}
+
+void FleetEnrollTest::_takRouteEdge()
+{
+    // Becomes the route: enrolled and not suspended.
+    QCOMPARE(FleetConnector::takRouteEdge(false, true, false), 1);
+    // Already the route: nothing again.
+    QCOMPARE(FleetConnector::takRouteEdge(true, true, false), 0);
+    // The RotorLab Connector takes over (suspended), or the station leaves.
+    QCOMPARE(FleetConnector::takRouteEdge(true, true, true), -1);
+    QCOMPARE(FleetConnector::takRouteEdge(true, false, false), -1);
+    // Not enrolled, or enrolled but suspended: never the route.
+    QCOMPARE(FleetConnector::takRouteEdge(false, false, false), 0);
+    QCOMPARE(FleetConnector::takRouteEdge(false, true, true), 0);
+}
+
+void FleetEnrollTest::_joinClosesTakLink()
+{
+    TakManager *tak = TakManager::instance();
+    tak->disconnectServer();
+    tak->clearFleetHandOff();
+    tak->_onEncrypted();      // a live TAK link (no socket in the test)
+    tak->_prefixSetFor = tak->_callsignPrefix;   // set on this install (security M1)
+    tak->setC2Armed(true);
+    QVERIFY(tak->c2Armed());
+    QVERIFY(tak->connected());
+
+    // An enrolled station (a token is stored) whose server does not answer.
+    FleetStore::setBaseUrl(QStringLiteral("http://127.0.0.1:9"));
+    FleetStore::setToken(QStringLiteral("unit-test-token-not-real"));
+    QVERIFY(FleetStore::enrolled());
+    {
+        FleetConnector conn;
+        QVERIFY(!tak->connected());
+        QVERIFY(!tak->c2Armed());
+        QVERIFY(!tak->fleetHandOffNotice().isEmpty());
+
+        // S4: a TakManager created after the route changed knows it.
+        {
+            TakManager late;
+            QVERIFY(late._fleetIsRoute);
+            late.setC2Armed(true);
+            QVERIFY(!late.c2Armed());
+        }
+
+        // The RotorLab Connector takes over: the direct link is wanted back,
+        // so nothing is closed and the notice goes.
+        conn.setSuspendedByRotorLab(true);
+        QVERIFY(tak->fleetHandOffNotice().isEmpty());
+        tak->_onEncrypted();
+        tak->_prefixSetFor = tak->_callsignPrefix;   // set on this install (security M1)
+        tak->setC2Armed(true);
+        QVERIFY(tak->c2Armed());
+        conn.setSuspendedByRotorLab(true);    // no change
+        QVERIFY(tak->connected());
+
+        // The RotorLab Connector is switched off: the Fleet Server is the
+        // route again, so the TAK link closes again.
+        conn.setSuspendedByRotorLab(false);
+        QVERIFY(!tak->connected());
+        QVERIFY(!tak->c2Armed());
+        QVERIFY(!tak->fleetHandOffNotice().isEmpty());
+        conn.setSuspendedByRotorLab(true);    // stop its retries before it goes
+    }
+    tak->clearFleetHandOff();
+    tak->disconnectServer();
 }

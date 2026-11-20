@@ -36,6 +36,9 @@ CPMAddPackage(
         "DOCDIR OFF"
         "EXAMPLEDIR OFF"
     PATCHES geographiclib.patch
+    # RotorLab: G108. Built and linked into GC only: EXCLUDE_FROM_ALL keeps its
+    # install rules (static library) out of the release files.
+    EXCLUDE_FROM_ALL YES
 )
 
 target_compile_options(GeographicLib_STATIC PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/wd9025>)

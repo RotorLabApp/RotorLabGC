@@ -1,0 +1,2 @@
+# G66: the shared terrain fixture and the RotorLab results are hashed as bytes; never convert line endings.
+*.json -text

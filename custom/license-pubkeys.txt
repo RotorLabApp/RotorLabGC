@@ -1,0 +1,25 @@
+# RotorLab license signing PUBLIC keys that RotorLab GC trusts for the signed
+# offline activation record (G89). Read by custom/CMakeLists.txt at configure
+# time and compiled into the binary.
+#
+# One key per line: the raw 32-byte Ed25519 public key as 64 hex characters,
+# exactly as GET /api/license/signing-keys lists it ("public_key"). GC derives
+# each key's kid itself. "#" starts a comment.
+#
+# Public keys only. A private key, a seed or a position key never goes in this
+# file or anywhere in this repository.
+#
+# Rotation: add the new key here (published with "signing": false) and ship a
+# GC release with both keys before RotorLab starts signing with the new one.
+# Remove an old key only when no record signed with it can still be within its
+# offline window (offline_until), which is at most the server's grace after
+# the switch.
+#
+# A stable (release) build refuses to configure while this file lists no key.
+# A development build may add keys at run time with the
+# ROTORLAB_LICENSE_PUBKEYS environment variable (comma-separated hex), for a
+# local RotorLab.
+
+# RotorLab production license signing key, kid 863ceee03e1ac4a8 (GC derives
+# the same kid).
+ecc1b1a5ef289e4bc658a056ca6cb684350400dd64c6ab11750c0d788fb915dd

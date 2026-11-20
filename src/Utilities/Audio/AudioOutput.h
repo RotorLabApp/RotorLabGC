@@ -10,9 +10,15 @@
 #pragma once
 
 #include <QtCore/QLoggingCategory>
+#include <QtCore/QMutex>
 #include <QtCore/QObject>
 
+#include <atomic>
+#include <functional>
+#include <memory>
+
 class QTextToSpeech;
+class QThread;
 class Fact;
 class AudioOutputTest;
 
@@ -61,11 +67,49 @@ public:
     ///     @param textMods The text modifications to apply.
     void say(const QString &text, TextMods textMods = TextMod::None);
 
+    /// True once the speech engine has been created on its own thread.
+    bool isEngineReady() const { return _engineReady; }
+
+signals:
+    /// Emitted once, from the speech thread, when engine setup finishes.
+    ///     @param canSpeak True if the selected engine can speak.
+    void engineReady(bool canSpeak);
+
 private:
-    QTextToSpeech *_engine = nullptr;
+    /// Shared with the speech thread. alive is cleared at shutdown under
+    /// mutex; after that the thread never touches this AudioOutput.
+    struct Guard {
+        QMutex mutex;
+        bool alive = true;
+    };
+    const std::shared_ptr<Guard> _guard = std::make_shared<Guard>();
+
+    void _createEngine(const std::shared_ptr<Guard> &guard);
+    void _shutdownEngineThread();
+
+    /// The speech engine and its plugin (for example speech-dispatcher on Linux)
+    /// live on their own thread. Connecting to a stuck speech-dispatcher can
+    /// block for minutes (G104); it must never block the main window.
+    QThread *_engineThread = nullptr;
+    QObject *_engineContext = nullptr;  ///< Lives on _engineThread; parent of _engine
+    QTextToSpeech *_engine = nullptr;   ///< Set on the speech thread before _engineReady
+    std::atomic_bool _engineReady = false;
+    std::atomic_bool _canSpeak = false;
     QAtomicInteger<qsizetype> _textQueueSize = 0;
     bool _initialized = false;
     std::atomic_bool _muted = false;
+
+    /// Engine name passed to QTextToSpeech; empty selects by priority.
+    QString _engineName;
+    /// Test hook: runs on the speech thread before the engine is created.
+    std::function<void()> _beforeEngineCreate;
+
+    static constexpr unsigned long kEngineThreadStopWaitMs = 2000;
+#if defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
+    static constexpr bool kEngineOnOwnThread = true;
+#else
+    static constexpr bool kEngineOnOwnThread = false;
+#endif
 
     static const QHash<QString, QString> _textHash;
 

@@ -202,7 +202,8 @@ Item {
                 mapControl:              _root.map
                 mapCircle:               _mapCircle
                 centerDragHandleVisible: false
-                borderColor:             _missionItem.terrainCollision ? "red" : QGroundControl.globalPalette.mapMissionTrajectory
+                // G76: the strike red of the 3D views (PLAN-CONTRACT.md section 4)
+                borderColor:             _missionItem.terrainCollision ? "#ff5544" : QGroundControl.globalPalette.mapMissionTrajectory
 
                 property bool blockSignals: false
 

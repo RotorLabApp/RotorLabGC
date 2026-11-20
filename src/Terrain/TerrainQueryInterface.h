@@ -14,6 +14,9 @@
 #include <QtCore/QObject>
 #include <QtNetwork/QNetworkReply>
 
+#include <algorithm>
+#include <cmath>
+
 class QGeoCoordinate;
 class QNetworkAccessManager;
 
@@ -32,6 +35,12 @@ namespace TerrainQuery
         Idle,
         Downloading,
     };
+
+    /// @return true if any height is NaN (unknown ground height)
+    inline bool hasUnknownHeight(const QList<double> &heights)
+    {
+        return std::any_of(heights.cbegin(), heights.cend(), [](double height) { return std::isnan(height); });
+    }
 }
 
 /// Base class for offline/online terrain queries

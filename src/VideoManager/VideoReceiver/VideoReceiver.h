@@ -10,11 +10,14 @@
 #pragma once
 
 #include <QtCore/QObject>
+#include <QtCore/QPointer>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QSize>
 #include <QtCore/QTimer>
+#include <QtQuick/QQuickItem>
 
 class QGCVideoStreamInfo;
-class QQuickItem;
+class VideoPacketTap;
 
 class VideoReceiver : public QObject
 {
@@ -27,17 +30,31 @@ public:
 
     bool isThermal() const { return (_name == QStringLiteral("thermalVideo")); }
 
+    /// G84: returns text with the user name and password (user:pass@) removed from every
+    /// URL in it, so a video URL can be logged without its credentials. Use it for every
+    /// log line that prints a video URI or an error string that may contain one.
+    static QString redactedUri(const QString &text)
+    {
+        // scheme:// then the userinfo up to the last '@' before the path, a space or the end
+        static const QRegularExpression userInfo(QStringLiteral(R"(([A-Za-z][A-Za-z0-9+.\-]*://)[^/\s]*@)"));
+        QString result = text;
+        return result.replace(userInfo, QStringLiteral(R"(\1)"));
+    }
+
     void *sink() { return _sink; }
-    QQuickItem *widget() { return _widget; }
+    QQuickItem *widget() { return _widget.data(); }
     QString name() const { return _name; }
     QString uri() const { return _uri; }
     bool started() const { return _started; }
     bool lowLatency() const { return _lowLatency; }
     QGCVideoStreamInfo *videoStreamInfo() { return _videoStreamInfo; }
     QString recordingOutput() const { return _recordingOutput; }
+    /// G88: every received access unit, before decoding, for recording (G95) and relay (G109).
+    /// Null for receivers without one (GStreamer, Qt Multimedia). See VideoPacketTap.h.
+    virtual VideoPacketTap *packetTap() { return nullptr; }
 
     virtual void setSink(void *sink) { if (sink != _sink) { _sink = sink; emit sinkChanged(_sink); } }
-    virtual void setWidget(QQuickItem *widget) { if (widget != _widget) { _widget = widget; emit widgetChanged(_widget); } }
+    virtual void setWidget(QQuickItem *widget) { if (widget != _widget) { _widget = widget; emit widgetChanged(widget); } }
     void setName(const QString &name) { if (name != _name) { _name = name; emit nameChanged(_name); } }
     void setUri(const QString &uri) { if (uri != _uri) { _uri = uri; emit uriChanged(_uri); } }
     void setStarted(bool started) { if (started != _started) { _started = started; emit startedChanged(_started); } }
@@ -67,6 +84,17 @@ public:
     Q_ENUM(STATUS)
     static bool isValidStatus(STATUS status) { return ((status >= STATUS_MIN) && (status <= STATUS_MAX)); }
 
+    /// G88 (m4080): why a started receiver gets no video, for the user. Changed on the GUI
+    /// thread only; cleared by start, stop and when the cause is gone.
+    enum RECEIVE_STATUS {
+        RECEIVE_STATUS_OK = 0,
+        RECEIVE_STATUS_PORT_IN_USE,     ///< the UDP video port is held by another program
+    };
+    Q_ENUM(RECEIVE_STATUS)
+    RECEIVE_STATUS receiveStatus() const { return _receiveStatus; }
+    /// Text for the user while receiveStatus() is not RECEIVE_STATUS_OK, else empty
+    QString receiveStatusText() const { return _receiveStatusText; }
+
 signals:
     void timeout();
     void streamingChanged(bool active);
@@ -74,6 +102,8 @@ signals:
     void recordingChanged(bool active);
     void recordingStarted(const QString &filename);
     void videoSizeChanged(QSize size);
+    /// G88 (m4080): emitted once per change, never repeated while the cause stays
+    void receiveStatusChanged(VideoReceiver::RECEIVE_STATUS status, const QString &text);
 
     void sinkChanged(void *sink);
     void nameChanged(const QString &name);
@@ -101,8 +131,17 @@ public slots:
     virtual void takeScreenshot(const QString &imageFile) = 0;
 
 protected:
+    void setReceiveStatus(RECEIVE_STATUS status, const QString &text)
+    {
+        if ((status != _receiveStatus) || (text != _receiveStatusText)) {
+            _receiveStatus = status;
+            _receiveStatusText = text;
+            emit receiveStatusChanged(_receiveStatus, _receiveStatusText);
+        }
+    }
+
     void *_sink = nullptr;
-    QQuickItem *_widget = nullptr;
+    QPointer<QQuickItem> _widget;   ///< G84: the QML item can be destroyed (Loader) while the receiver lives
     QGCVideoStreamInfo *_videoStreamInfo = nullptr;
     QString _name;
     QString _uri;
@@ -126,6 +165,8 @@ protected:
     uint32_t _signalDepth = 0;
     uint32_t _timeout = 0;
     QString _recordingOutput;
+    RECEIVE_STATUS _receiveStatus = RECEIVE_STATUS_OK;
+    QString _receiveStatusText;
 
     // bool _initialized = false;
     // bool _fullScreen = false;

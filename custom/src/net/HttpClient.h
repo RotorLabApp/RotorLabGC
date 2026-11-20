@@ -21,7 +21,10 @@
 
 #include <QtCore/QByteArray>
 #include <QtCore/QJsonObject>
+#include <QtCore/QList>
 #include <QtCore/QObject>
+#include <QtCore/QPair>
+#include <QtCore/QPointer>
 #include <QtCore/QString>
 #include <QtNetwork/QNetworkRequest>
 
@@ -40,6 +43,27 @@ struct HttpReply {
     QString     error;          ///< transport error, or the server's own sentence
     int         retryAfter = -1;    ///< Retry-After seconds, when the server sent one
     bool        pinRefused = false; ///< stopped before sending: the server key did not match the pin
+    /// QNetworkReply::NetworkError of the transport failure (0: none). Lets a
+    /// caller tell "the server closed the connection" (RemoteHostClosedError,
+    /// or UnknownNetworkError for "Unable to write") from "never connected".
+    int         netError = 0;
+    /// putRange(): request body bytes handed to the socket before the reply
+    /// ended (-1 for other calls). A close with bodySent > 0 and no status is
+    /// a server that stopped reading the body, not a link that never came up.
+    qint64      bodySent = -1;
+    /// Response headers as received (G95: Upload-Offset on HEAD, 204 and 409).
+    QList<QPair<QByteArray, QByteArray>> headers;
+
+    /// The first response header called `name` (case-insensitive), or empty.
+    QByteArray header(const QByteArray &name) const
+    {
+        for (const auto &h : headers) {
+            if (h.first.compare(name, Qt::CaseInsensitive) == 0) {
+                return h.second;
+            }
+        }
+        return {};
+    }
 };
 
 class HttpClient : public QObject
@@ -112,6 +136,10 @@ public:
     /// PUT `body` as JSON to `path`.
     void put(const QString &path, const QJsonObject &body, Handler done, int timeoutMs = 15000);
 
+    /// PATCH `body` as JSON to `path` (G109: `PATCH /live/<id>`). Bearer header
+    /// through _request(), wall-clock timeout, as the other JSON calls.
+    void patchJson(const QString &path, const QJsonObject &body, Handler done, int timeoutMs = 15000);
+
     /// POST without a bearer token - for the one call some connectors make
     /// before a credential exists.
     void postUnauthenticated(const QString &path, const QJsonObject &body,
@@ -145,7 +173,47 @@ public:
                            const QByteArray &sha256, Handler done,
                            Progress progress = {}, int idleTimeoutMs = 60000);
 
+    /// Extra request headers for postBytes() and putBytes(). `Authorization`,
+    /// `Content-Length` and `Host` (any case) are dropped: the bearer header is
+    /// set in one place only, _request().
+    using Headers = QList<QPair<QByteArray, QByteArray>>;
+
+    /// G95/G109: POST raw bytes (an init segment, a fragment) with a content
+    /// type and extra headers. Wall-clock timeout, like the JSON calls.
+    void postBytes(const QString &path, const QByteArray &body, const QByteArray &contentType,
+                   const Headers &extraHeaders, Handler done, int timeoutMs = 15000);
+
+    /// G109: PUT raw bytes, as postBytes().
+    void putBytes(const QString &path, const QByteArray &body, const QByteArray &contentType,
+                  const Headers &extraHeaders, Handler done, int timeoutMs = 15000);
+
+    /// G95: PUT `length` bytes of `filePath` starting at `offset`, streamed
+    /// from disk, with `Content-Range: bytes offset-(offset+length-1)/totalSize`
+    /// and `X-Chunk-SHA256: sha256Hex`. The file is opened read-only, in
+    /// binary, and never read whole. Idle timeout, as putFile().
+    /// Returns the reply (hold it in a QPointer), or null when it could not
+    /// start (then `done` has already run).
+    QNetworkReply *putRange(const QString &path, const QString &filePath, qint64 offset,
+                            qint64 length, const QByteArray &sha256Hex, qint64 totalSize,
+                            Handler done, Progress progress = {}, int idleTimeoutMs = 60000);
+
+    /// G95: HEAD `path`; the reply's `headers` carry the answer.
+    void head(const QString &path, Handler done, int timeoutMs = 15000);
+
+    /// G109: DELETE `path` (bearer header through _request(), as every call).
+    void deleteResource(const QString &path, Handler done, int timeoutMs = 15000);
+
+    /// Drop every reply in flight, as reset() does, AND abort each one on the
+    /// wire, so a revoked station stops sending at once instead of finishing
+    /// the request (a chunk upload, a live fragment) up to its timeout later.
+    /// No handler runs for an aborted reply.
+    void abortAll();
+
 private:
+    void _sendRaw(const QString &verb, const QString &path, const QByteArray &body,
+                  const QByteArray &contentType, const Headers &extraHeaders,
+                  Handler done, int timeoutMs);
+    void _armDeadline(QNetworkReply *reply, int timeoutMs);
     void _send(const QString &verb, const QString &path, const QJsonObject *body,
                bool authenticated, Handler done, int timeoutMs);
     QNetworkReply *_sendFile(const QString &verb, const QString &path, const QString &filePath,
@@ -173,4 +241,5 @@ private:
     QString  _token;
     QString  _pin;                  ///< lowercase hex SPKI SHA-256, or empty
     quint64  _generation = 0;       ///< bumped by reset(); stale replies are dropped
+    QList<QPointer<QNetworkReply>> _inFlight;   ///< for abortAll()
 };

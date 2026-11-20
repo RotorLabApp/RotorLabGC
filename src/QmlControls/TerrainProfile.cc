@@ -14,8 +14,12 @@
 #include "ComplexMissionItem.h"
 #include "QGCLoggingCategory.h"
 #include "QGCApplication.h"
+#include "QGC.h"
 
 #include <QtQuick/QSGFlatColorMaterial>
+
+#include <algorithm>
+#include <cmath>
 
 QGC_LOGGING_CATEGORY(TerrainProfileLog, "TerrainProfileLog")
 
@@ -27,9 +31,20 @@ TerrainProfile::TerrainProfile(QQuickItem* parent)
     connect(this, &QQuickItem::heightChanged,           this, &QQuickItem::update);
     connect(this, &TerrainProfile::visibleWidthChanged, this, &QQuickItem::update);
 
-    // This collapse multiple _updateSignals in a row to a single update
-    connect(this, &TerrainProfile::_updateSignal, this, &QQuickItem::update, Qt::QueuedConnection);
+    // This collapse multiple _updateSignals in a row to a single update. Keep this the only queued slot of
+    // _updateSignal on this object (see setMissionController).
+    connect(this, &TerrainProfile::_updateSignal, this, &TerrainProfile::_requestPaint, Qt::QueuedConnection);
     qgcApp()->addCompressedSignal(QMetaMethod::fromSignal(&TerrainProfile::_updateSignal));
+
+    _legStatesTimer.setSingleShot(true);
+    _legStatesTimer.setInterval(0);
+    connect(&_legStatesTimer, &QTimer::timeout, this, &TerrainProfile::_updateLegStates);
+}
+
+void TerrainProfile::_requestPaint(void)
+{
+    _paintRequestCount++;
+    update();
 }
 
 void TerrainProfile::componentComplete(void)
@@ -49,6 +64,99 @@ void TerrainProfile::setMissionController(MissionController* missionController)
 
         connect(this,               &TerrainProfile::visibleWidthChanged,           this, &TerrainProfile::_updateSignal, Qt::QueuedConnection);
         connect(_missionController, &MissionController::recalcTerrainProfile,       this, &TerrainProfile::_updateSignal, Qt::QueuedConnection);
+        // G76: the leg state line follows every profile update (recalcTerrainProfile is also emitted when a leg's
+        // state changes). Not through a second queued slot on _updateSignal: _updateSignal is a compressed signal,
+        // and QGCApplication::compressEvent treats two queued pointer-to-member slots on the same receiver as the
+        // same call, so it kept only the newer one and dropped the repaint (41f1eff: the profile lost its terrain).
+        // A direct connection starts a zero-time single-shot timer instead; timer events are never compressed.
+        connect(_missionController, &MissionController::recalcTerrainProfile,       &_legStatesTimer, qOverload<>(&QTimer::start));
+        connect(_missionController, &MissionController::visualItemsChanged,         &_legStatesTimer, qOverload<>(&QTimer::start));
+        connect(_missionController, &MissionController::missionTotalDistanceChanged, &_legStatesTimer, qOverload<>(&QTimer::start));
+        _updateLegStates();
+    }
+}
+
+TerrainProfile::LegStateCounts TerrainProfile::countLegStates(const QList<FlightPathSegment*>& segments)
+{
+    LegStateCounts counts;
+    for (const FlightPathSegment* segment: segments) {
+        if (!segment) {
+            continue;
+        }
+        switch (segment->terrainState()) {
+        case FlightPathSegment::TerrainStrike:
+            counts.strike++;
+            break;
+        case FlightPathSegment::TerrainUnknown:
+            counts.unknown++;
+            break;
+        case FlightPathSegment::TerrainNoStrike:
+        case FlightPathSegment::TerrainGroundContact:
+            counts.noStrike++;
+            break;
+        case FlightPathSegment::TerrainNotChecked:
+            break;
+        }
+    }
+    return counts;
+}
+
+double TerrainProfile::profileDistanceFor(double drawnDistance, double missionTotalDistance)
+{
+    const double drawn      = std::isfinite(drawnDistance) ? drawnDistance : 0.0;
+    const double mission    = std::isfinite(missionTotalDistance) ? missionTotalDistance : 0.0;
+    return std::max(drawn, mission);
+}
+
+QString TerrainProfile::terrainStateColorName(int state, bool darkTheme) const
+{
+    if (state < FlightPathSegment::TerrainNotChecked || state > FlightPathSegment::TerrainStrike) {
+        return QString();
+    }
+    const QColor color = FlightPathSegment::terrainStateColor(static_cast<FlightPathSegment::TerrainState>(state), darkTheme);
+    return color.isValid() ? color.name() : QString();
+}
+
+void TerrainProfile::_updateLegStates(void)
+{
+    // Runs on the GUI thread (never from updatePaintNode, which runs on the render thread)
+    QList<FlightPathSegment*> segments;
+    double drawnDistance = 0;   // the same walk as updatePaintNode's currentDistance
+    if (_visualItems) {
+        for (int viIndex = 0; viIndex < _visualItems->count(); viIndex++) {
+            VisualMissionItem*  visualItem  = _visualItems->value<VisualMissionItem*>(viIndex);
+            ComplexMissionItem* complexItem = _visualItems->value<ComplexMissionItem*>(viIndex);
+            if (complexItem) {
+                if (complexItem->flightPathSegments()->count() == 0) {
+                    drawnDistance += complexItem->complexDistance();
+                }
+                for (int segmentIndex = 0; segmentIndex < complexItem->flightPathSegments()->count(); segmentIndex++) {
+                    FlightPathSegment* segment = complexItem->flightPathSegments()->value<FlightPathSegment*>(segmentIndex);
+                    segments.append(segment);
+                    drawnDistance += segment ? segment->totalDistance() : 0.0;
+                }
+            }
+            if (visualItem && visualItem->simpleFlightPathSegment()) {
+                segments.append(visualItem->simpleFlightPathSegment());
+                drawnDistance += visualItem->simpleFlightPathSegment()->totalDistance();
+            }
+        }
+    }
+
+    // G76: the distance axis ends at the end of the last drawn leg, so the leg back to launch of an RTL is shown
+    const double newProfileDistance = profileDistanceFor(drawnDistance, _missionController ? _missionController->missionTotalDistance() : qQNaN());
+    if (!QGC::fuzzyCompare(newProfileDistance, _profileDistance)) {
+        _profileDistance = newProfileDistance;
+        emit profileDistanceChanged();
+        emit _updateSignal();
+    }
+
+    const LegStateCounts counts = countLegStates(segments);
+    if (counts.strike != _strikeLegCount || counts.unknown != _unknownLegCount || counts.noStrike != _noStrikeLegCount) {
+        _strikeLegCount     = counts.strike;
+        _unknownLegCount    = counts.unknown;
+        _noStrikeLegCount   = counts.noStrike;
+        emit legStatesChanged();
     }
 }
 
@@ -266,7 +374,8 @@ QSGNode* TerrainProfile::updatePaintNode(QSGNode* oldNode, QQuickItem::UpdatePai
     qCDebug(TerrainProfileLog) << QStringLiteral("updatePaintNode counter:%1 cFlightProfileSegments:%2 cTerrainProfilePoints:%3 cMissingTerrainSegments:%4 cTerrainCollisionSegments:%5 _minAMSLAlt:%6 _maxAMSLAlt:%7 maxTerrainHeight:%8")
                                   .arg(counter++).arg(cFlightProfileSegments).arg(cTerrainProfilePoints).arg(cMissingTerrainSegments).arg(cTerrainCollisionSegments).arg(_minAMSLAlt).arg(_maxAMSLAlt).arg(maxTerrainHeight);
 
-    _pixelsPerMeter = _visibleWidth / _missionController->missionTotalDistance();
+    // G76: over the whole profile distance, so the RTL leg back to launch is not cut off at the right edge
+    _pixelsPerMeter = _visibleWidth / (_profileDistance > 0 ? _profileDistance : _missionController->missionTotalDistance());
 
     // Instantiate nodes
     if (!rootNode) {

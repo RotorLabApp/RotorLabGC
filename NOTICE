@@ -1,20 +1,21 @@
 RotorLab GC
-Copyright (c) 2026 RotorLab, Inc., for RotorLab's changes.
+Copyright (c) 2026 RotorLab Inc, for RotorLab's changes.
 
 RotorLab GC is a modified version of QGroundControl, the ground control
 station of the Dronecode project (https://github.com/mavlink/qgroundcontrol).
-RotorLab, Inc. modified it in 2026; this notice was last updated on 2026-11-15
-for RotorLab GC 5.1.1. QGroundControl is Copyright (c) 2009-2024
-QGroundControl Project and its contributors, and is dual licensed under the
-Apache License 2.0 (LICENSE-APACHE) and the GNU General Public License v3
-(LICENSE-GPL); see COPYING.md. Upstream copyright and license notices are kept
-as they appear upstream. RotorLab's changes are offered under the same two
-licenses, at your choice.
+RotorLab Inc modified it in 2026; this notice was last updated on
+2026-11-18. QGroundControl is Copyright (c) 2009-2024 QGroundControl
+Project and its contributors, and is dual licensed under the Apache License
+2.0 (LICENSE-APACHE) and the GNU General Public License v3 (LICENSE-GPL); see
+COPYING.md. Upstream copyright and license notices are kept as they appear
+upstream. RotorLab's changes are offered under the same two licenses, at your
+choice.
 
-RotorLab's release builds (the Windows installer and the Android APK) link
-Qt modules that are offered only under the GNU GPL v3 (Qt Charts and Qt
-Quick 3D) and embed ArduPilot parameter data generated from GPLv3 source,
-so those builds are distributed under the GNU General Public License v3.
+RotorLab's release builds (the Windows installer, the Android APK and the
+Linux AppImage) link Qt modules that are offered only under the GNU GPL v3
+(Qt Charts and Qt Quick 3D) and embed ArduPilot parameter data generated
+from GPLv3 source, so those builds are distributed under the GNU General
+Public License v3.
 Distributing a build under the Apache License 2.0 instead would need
 commercial Qt licenses and the removal of the GPL-only parts.
 
@@ -32,6 +33,8 @@ e0816c957602789200ae5ba0af45217f0f2f1db4):
   derived from upstream files (custom-example/src/CustomPlugin.* and
   src/UI/AppSettings/SettingsPagesModel.qml) and keep their upstream notices.
   RotorLab's features:
+  - the 3D view of the plan in Plan view, with editing (custom/src/plan3d,
+    custom/res/plan3d; Windows and Linux builds);
   - TAK / ATAK (custom/src/tak, custom/res/tak): publishing aircraft to a TAK
     server, commands from ATAK markers behind per-verb switches and a master
     arm, the command list, banner and command log, and TAK enrollment;
@@ -40,19 +43,22 @@ e0816c957602789200ae5ba0af45217f0f2f1db4):
     in command log, checklists and missions from RotorLab;
   - Fleet Server connection (custom/src/fleet, custom/res/fleet);
   - license and Device Key storage (custom/src/license, custom/res/license,
-    custom/src/rotorlab/Credential.*) and network helpers (custom/src/net).
+    custom/src/rotorlab/Credential.*), including the check of RotorLab's
+    signed offline activation record (custom/src/license/LicenseRecord.*,
+    custom/src/license/Ed25519.*, a wrapper over the vendored Monocypher in
+    custom/src/license/third_party/monocypher, and custom/license-pubkeys.txt),
+    and network helpers (custom/src/net).
 - src/: the responsive full-window settings layout (for example
   src/QmlControls/RLPageLayout.qml and the pages in src/UI/AppSettings), a
   per-user single-instance check (src/RunGuard.*), and smaller fixes.
 - test/Custom/: unit tests for RotorLab's features.
 - cmake/, CMakeLists.txt, android/, custom/android/, deploy/: build options,
-  the Windows installer and version resource, installing the license files
-  with the binaries, and the release script deploy/rotorlab/release.ps1.
-- Documentation and project files: README.md, CHANGELOG.md (title,
-  introduction and RotorLab section; the upstream history follows
-  unchanged), SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md (adapted
-  from the Contributor Covenant 2.1, CC BY 4.0), docs/, the .github/ issue
-  and pull request templates, NOTICE, COPYING.md and licenses/.
+  the Windows installer and version resource, the Linux AppImage packaging
+  (cmake/CreateAppImage.cmake), installing the license files with the
+  binaries, the release scripts deploy/rotorlab/release.ps1 and
+  deploy/rotorlab/linux/, and the notice check deploy/rotorlab/check-notice.py.
+- Documentation and notices: NOTICE, COPYING.md, licenses/, CHANGELOG.md
+  (RotorLab section).
 
 
 THIRD-PARTY COMPONENTS
@@ -60,11 +66,14 @@ THIRD-PARTY COMPONENTS
 A RotorLab GC release build includes the components below, in addition to
 QGroundControl itself. Each is used under its own license. The full license
 texts and notices are in the licenses/ folder of this repository and are
-installed with the Windows installer (next to bin/) and the Android APK
-(assets/licenses/). The source of each component is available from the
-location shown, at the version shown.
+installed with the Windows installer (next to bin/), the Android APK
+(assets/licenses/) and the Linux AppImage (usr/). The source of each
+component is available from the location shown, at the version shown. Each
+release build is checked against this list before it is released
+(deploy/rotorlab/check-notice.py): every library it bundles must be named
+here, and its license file must be in the build.
 
-Qt 6.8.3 (The Qt Company), dynamically linked, on Windows and Android:
+Qt 6.8.3 (The Qt Company), dynamically linked, on Windows, Android and Linux:
   Qt Core, Gui, Widgets, OpenGL, OpenGL Widgets, Network, Qml, Qml Core,
   Qml Meta, Qml Models, Qml Worker Script, Quick, Quick Controls, Quick
   Templates, Quick Dialogs, Quick Layouts, Quick Shapes, Quick Effects, Svg,
@@ -72,7 +81,9 @@ Qt 6.8.3 (The Qt Company), dynamically linked, on Windows and Android:
   Bluetooth, SerialPort, Sensors, TextToSpeech, Shader Tools, Qt Labs
   modules (Animation, Folder List Model, Platform, Qml Models), Qt 5
   Compatibility (Core5Compat, Graphical Effects), Image Formats, Qt
-  translations, Charts and Quick 3D.
+  translations, Charts and Quick 3D. On Android and Linux also Qt's FFmpeg
+  stub libraries (libQt6FFmpegStub-*), and on Linux also Qt DBus, Wayland
+  Client, XCB QPA and EGLFS support.
   Qt is used under the GNU Lesser General Public License v3
   (licenses/LGPL-3.0-only.txt) where the module is offered under it, and
   otherwise (Qt Charts, Qt Quick 3D) under the GNU General Public License v3
@@ -88,7 +99,7 @@ Qt 6.8.3 (The Qt Company), dynamically linked, on Windows and Android:
 
 FFmpeg 7.1 libraries (avcodec, avformat, avutil, swresample, swscale), as
   built for Qt Multimedia 6.8.3 in an LGPL configuration (no --enable-gpl,
-  no --enable-nonfree), dynamically linked, on Windows and Android.
+  no --enable-nonfree), dynamically linked, on Windows, Android and Linux.
   GNU LGPL v2.1 or later (licenses/LGPL-2.1.txt,
   licenses/components/FFmpeg-7.1-LICENSE.md.txt).
   Source: https://ffmpeg.org/releases/ (release 7.1, ffmpeg-7.1.tar.xz).
@@ -113,6 +124,11 @@ GeographicLib 2.5, MIT License. https://github.com/geographiclib/geographiclib
   (tag r2.5)
 Shapelib 1.6.1, MIT License (or, at your choice, GNU LGPL v2 or later).
   https://github.com/OSGeo/shapelib (tag v1.6.1)
+Monocypher 4.0.3 (monocypher.c and its optional Ed25519 module, unmodified,
+  in custom/src/license/third_party/monocypher), BSD 2-Clause License or
+  CC0 1.0, at your choice (licenses/components/Monocypher-4.0.3-LICENCE.md.txt).
+  https://monocypher.org/ (monocypher-4.0.3.tar.gz, SHA-512
+  40904ada5c7ee4f7741733e38b69a30a4b0561cbffba5ffe7c2dce16136d540251ec0d9056ff606510d3b5b708fb8a40db7e0870d4a0b2dc17ba2bfb880f8965)
 ArduPilot parameter metadata (ArduPilot-Parameter-Repository), generated
   from ArduPilot, which is licensed under the GNU General Public License v3.
   Git submodule src/FirmwarePlugin/APM/ArduPilot-Parameter-Repository at
@@ -130,6 +146,91 @@ Windows only:
   License.
   The ArduPilot USB driver package (deploy/windows/driver.msi) from ArduPilot,
   which the installer offers to install.
+  The installer is made with NSIS 3 (Nullsoft Scriptable Install System); its
+  installer code and the NSIS plug-ins it carries (System.dll, StartMenu.dll)
+  are under the zlib/libpng License (licenses/Zlib.txt).
+  https://nsis.sourceforge.io/
+
+Linux only (the AppImage, built on Ubuntu 22.04):
+  ICU 73 (libicuuc, libicui18n, libicudata) as shipped with Qt 6.8.3 for
+    Linux, Unicode License (licenses/Unicode-3.0.txt).
+    https://github.com/unicode-org/icu (release 73)
+  The AppImage runtime: AppImage type2-runtime 20251108 (release 20251108,
+    commit dd6cebedcbddde9c82f89b011e8e1d40b6e43868, runtime-x86_64 SHA-256
+    2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d), the
+    start of the .AppImage file that mounts or extracts it. MIT License
+    (licenses/components/AppImage-type2-runtime-20251108-LICENSE.txt in the
+    AppImage, the release's own LICENSE file). It contains, statically
+    linked: musl libc (MIT License), libfuse 3 (GNU LGPL v2.1,
+    licenses/LGPL-2.1.txt), squashfuse (BSD 2-Clause License,
+    licenses/BSD-2-Clause.txt), Zstandard (BSD 3-Clause License) and zlib
+    (zlib License, licenses/Zlib.txt). It prints these terms with
+    --appimage-help. Source and build scripts:
+    https://github.com/AppImage/type2-runtime (tag 20251108).
+  The AppImage is packed with appimagetool 1.9.1 and linuxdeploy
+    1-alpha-20251107-1, each pinned by SHA-256 in
+    deploy/rotorlab/linux/build-appimage.sh; neither is shipped.
+  Libraries from Ubuntu 22.04 that the AppImage carries (linuxdeploy bundles
+    what Qt and GC need beyond the base system). Each is listed below by its
+    Ubuntu package and that package's version, with its source package where
+    the name differs. Each is used under its own license, as stated in the
+    package's copyright file, which the AppImage carries at
+    usr/share/doc/<package>/copyright. Each package's source is in the
+    Ubuntu 22.04 archive at the version shown
+    (https://launchpad.net/ubuntu/+source/<source package>).
+    GNU LGPL v2.1 or later (licenses/LGPL-2.1.txt):
+      libpulse0 1:15.99.1+dfsg1-1ubuntu2.2 (pulseaudio; libpulse and
+        libpulsecommon)
+      libsndfile1 1.0.31-2ubuntu0.2 (libsndfile)
+      libgcrypt20 1.9.4-3ubuntu3.3
+      libsystemd0 249.11-0ubuntu3.23 (systemd)
+      libapparmor1 3.0.4-2ubuntu2.5 (apparmor)
+      libasyncns0 0.8-6build2 (libasyncns)
+    GNU LGPL v2 or later (licenses/LGPL-2.1.txt):
+      libkeyutils1 1.6.1-2ubuntu3 (keyutils)
+    Academic Free License 2.1 or GNU GPL v2 or later, at your choice
+    (licenses/GPL-2.0-only.txt):
+      libdbus-1-3 1.12.20-2ubuntu4.1 (dbus)
+    BSD 3-Clause License or GNU GPL v2, at your choice
+    (licenses/BSD-3-Clause.txt):
+      libcap2 1:2.44-1ubuntu0.22.04.3
+    MIT or X11-style licenses (licenses/MIT.txt, licenses/X11.txt):
+      libxcb-randr0 1.14-3ubuntu3, libxcb-render0 1.14-3ubuntu3,
+        libxcb-shape0 1.14-3ubuntu3, libxcb-shm0 1.14-3ubuntu3,
+        libxcb-sync1 1.14-3ubuntu3, libxcb-xfixes0 1.14-3ubuntu3,
+        libxcb-xkb1 1.14-3ubuntu3 (libxcb)
+      libxcb-cursor0 0.1.1-4ubuntu1 (xcb-util-cursor)
+      libxcb-icccm4 0.4.1-1.1build2 (xcb-util-wm)
+      libxcb-image0 0.4.0-2 (xcb-util-image)
+      libxcb-keysyms1 0.4.0-1build3 (xcb-util-keysyms)
+      libxcb-render-util0 0.3.9-1build3 (xcb-util-renderutil)
+      libxcb-util1 0.4.0-1build2 (xcb-util)
+      libxau6 1:1.0.9-1build5 (libxau)
+      libxdmcp6 1:1.1.3-0ubuntu5 (libxdmcp)
+      libxkbcommon0 1.4.0-1, libxkbcommon-x11-0 1.4.0-1 (libxkbcommon)
+      libwayland-cursor0 1.20.0-1ubuntu0.1, libwayland-egl1 1.20.0-1ubuntu0.1,
+        libwayland-server0 1.20.0-1ubuntu0.1 (wayland)
+      libffi8 3.4.2-4 (libffi)
+      libbrotli1 1.0.9-2ubuntu0.1 (brotli; libbrotlicommon and libbrotlidec)
+      libkrb5-3 1.19.2-2ubuntu0.10, libk5crypto3 1.19.2-2ubuntu0.10,
+        libkrb5support0 1.19.2-2ubuntu0.10, libgssapi-krb5-2 1.19.2-2ubuntu0.10
+        (MIT Kerberos, krb5)
+    BSD licenses (licenses/BSD-2-Clause.txt, licenses/BSD-3-Clause.txt):
+      libbsd0 0.11.5-1 (libbsd)
+      libmd0 1.0.4-1build1 (libmd)
+      liblz4-1 1.9.3-2build2 (lz4)
+      libzstd1 1.4.8+dfsg-3build1 (libzstd)
+      libpcre3 2:8.39-13ubuntu0.22.04.1 (pcre3, PCRE 8.39)
+      libopus0 1.3.1-0.1build2 (opus)
+      libogg0 1.3.5-0ubuntu3 (libogg)
+      libvorbis0a 1.3.7-1build2, libvorbisenc2 1.3.7-1build2 (libvorbis)
+      libflac8 1.3.3-2ubuntu0.2 (flac; Xiph.Org BSD-style license)
+    libpng License (licenses/Libpng.txt):
+      libpng16-16 1.6.37-3ubuntu0.7 (libpng1.6)
+    bzip2 license (BSD-style):
+      libbz2-1.0 1.0.8-5ubuntu0.1 (bzip2)
+    Public domain:
+      liblzma5 5.2.5-2ubuntu1.2 (xz-utils, XZ Utils liblzma)
 
 Android only:
   OpenSSL 3.1.8 (libssl_3.so, libcrypto_3.so; prebuilt by KDAB
@@ -186,12 +287,10 @@ licenses/qt-third-party/  third-party code in Qt 6.8.3, with copyright lines
 
 TRADEMARKS
 
-QGroundControl, Dronecode, MAVLink, ArduPilot, PX4, ATAK, TAK and
-OpenTAKServer are trademarks of their respective owners. Qt is a registered
-trademark of The Qt Company Ltd. Windows is a trademark of the Microsoft group
-of companies. Android is a trademark of Google LLC. RotorLab and RotorLab GC
-are trademarks of RotorLab, Inc. Naming these projects and products describes
-what GC is built on and works with. It does not imply endorsement by, or
-affiliation with, the QGroundControl project, the Dronecode Foundation,
-ArduPilot, PX4, the TAK Product Center, the U.S. Government or any other third
-party.
+QGroundControl and Dronecode are trademarks of their respective owners, as
+are ArduPilot, PX4, ATAK and TAK. Linux is the registered trademark of Linus
+Torvalds in the U.S. and other countries. Ubuntu is a registered trademark of
+Canonical Ltd. RotorLab and RotorLab GC are trademarks of RotorLab Inc. Naming these projects and products describes what GC is built
+on and works with. It does not imply endorsement by, or affiliation with, the
+QGroundControl project, the Dronecode Foundation, ArduPilot, PX4, the TAK
+Product Center or any other third party.

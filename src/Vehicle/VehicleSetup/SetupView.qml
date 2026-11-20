@@ -30,6 +30,16 @@ Rectangle {
 
     QGCPalette { id: qgcPal; colorGroupEnabled: true }
 
+    // RotorLab G97: not shown; the source of GC's page-frame colors (A156,
+    // RLPageLayout). The status panels below are a centered note on the page
+    // color, like the settings pages, instead of a shaded block.
+    RLPageLayout {
+        id:         _rlPage
+        visible:    false
+        width:      panelLoader.width
+        height:     0
+    }
+
     readonly property real      _defaultTextHeight: ScreenTools.defaultFontPixelHeight
     readonly property real      _defaultTextWidth:  ScreenTools.defaultFontPixelWidth
     readonly property real      _horizontalMargin:  _defaultTextWidth / 2
@@ -126,13 +136,14 @@ Rectangle {
     Component {
         id: noComponentsVehicleSummaryComponent
         Rectangle {
-            color: qgcPal.windowShade
+            color: qgcPal.window   // RotorLab G97
             QGCLabel {
                 anchors.margins:        _defaultTextWidth * 2
                 anchors.fill:           parent
                 verticalAlignment:      Text.AlignVCenter
                 horizontalAlignment:    Text.AlignHCenter
                 wrapMode:               Text.WordWrap
+                color:                  _rlPage.noteColor   // RotorLab G97
                 font.pointSize:         ScreenTools.mediumFontPointSize
                 text:                   qsTr("%1 does not currently support setup of your vehicle type. ").arg(QGroundControl.appName) +
                                         "If your vehicle is already configured you can still Fly."
@@ -144,13 +155,14 @@ Rectangle {
     Component {
         id: disconnectedVehicleSummaryComponent
         Rectangle {
-            color: qgcPal.windowShade
+            color: qgcPal.window   // RotorLab G97
             QGCLabel {
                 anchors.margins:        _defaultTextWidth * 2
                 anchors.fill:           parent
                 verticalAlignment:      Text.AlignVCenter
                 horizontalAlignment:    Text.AlignHCenter
                 wrapMode:               Text.WordWrap
+                color:                  _rlPage.noteColor   // RotorLab G97
                 font.pointSize:         ScreenTools.largeFontPointSize
                 text:                   qsTr("Vehicle settings and info will display after connecting your vehicle.") +
                                         (ScreenTools.isMobile || !_corePlugin.options.showFirmwareUpgrade ? "" : " Click Firmware on the left to upgrade your vehicle.")
@@ -164,7 +176,7 @@ Rectangle {
         id: missingParametersVehicleSummaryComponent
 
         Rectangle {
-            color: qgcPal.windowShade
+            color: qgcPal.window   // RotorLab G97
 
             QGCLabel {
                 anchors.margins:        _defaultTextWidth * 2
@@ -172,6 +184,7 @@ Rectangle {
                 verticalAlignment:      Text.AlignVCenter
                 horizontalAlignment:    Text.AlignHCenter
                 wrapMode:               Text.WordWrap
+                color:                  _rlPage.noteColor   // RotorLab G97
                 font.pointSize:         ScreenTools.mediumFontPointSize
                 text:                   qsTr("You are currently connected to a vehicle but it did not return the full parameter list. ") +
                                         qsTr("As a result, the full set of vehicle setup options are not available.")
@@ -191,6 +204,7 @@ Rectangle {
                 verticalAlignment:      Text.AlignVCenter
                 horizontalAlignment:    Text.AlignHCenter
                 wrapMode:               Text.WordWrap
+                color:                  _rlPage.noteColor   // RotorLab G97
                 font.pointSize:         ScreenTools.mediumFontPointSize
                 text:                   _messagePanelText
             }

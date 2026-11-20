@@ -446,7 +446,8 @@ Item {
             z:              QGroundControl.zOrderMapItems
             border.width:   1
             border.color:   "black"
-            color:          _missionItem.terrainCollision ? "red" : "orange"
+            // G76: the strike red of the 3D views (PLAN-CONTRACT.md section 4)
+            color:          _missionItem.terrainCollision ? "#ff5544" : "orange"
             opacity:        0.5
 
             readonly property real angleRadians:    Math.atan((_landingWidthMeters / 2) / (_landingLengthMeters / 2))

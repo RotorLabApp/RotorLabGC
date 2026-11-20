@@ -6,7 +6,7 @@ No. GC records, reminds and warns, and shows what RotorLab's records say. It nev
 
 ### Can anything in GC stop my aircraft from arming or taking off?
 
-RotorLab's features are designed not to. The RotorLab Connector, the crew screen, the checklist offers and the queue never hold up arming, a launch or video, and the crew screen can always be skipped. A license re-check while GC is running never closes it or interrupts a flight. QGroundControl's own checks and your autopilot's own checks work as they always do.
+RotorLab's features are designed not to. The RotorLab Connector, the crew screen, the checklist offers and the queue never hold up arming or a launch, and the crew screen can always be skipped. A license re-check while GC is running never closes it or interrupts a flight. QGroundControl's own checks and your autopilot's own checks work as they always do.
 
 ### Do I need RotorLab to use GC?
 

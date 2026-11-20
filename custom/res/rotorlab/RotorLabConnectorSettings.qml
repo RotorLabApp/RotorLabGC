@@ -218,6 +218,15 @@ Rectangle {
                     value: RotorLabConnector.keyStoreName
                     visible: RotorLabConnector.configured
                 }
+                // G82: kept for this session only, or moved from / removed
+                // from the settings file. Never saved in the settings file.
+                QGCLabel {
+                    Layout.fillWidth: true
+                    wrapMode:   Text.WordWrap
+                    textFormat: Text.PlainText
+                    visible:    RotorLabConnector.keyStorageText !== ""
+                    text:       RotorLabConnector.keyStorageText
+                }
                 Row2 {
                     label: qsTr("Server")
                     value: RotorLabConnector.baseUrl

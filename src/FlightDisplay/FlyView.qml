@@ -27,9 +27,6 @@ import QGroundControl.Palette
 import QGroundControl.ScreenTools
 import QGroundControl.Vehicle
 
-// 3D Viewer modules
-import Viewer3D
-
 Item {
     id: _root
 
@@ -99,7 +96,6 @@ Item {
             pipMode:                !_mainWindowIsMap
             toolInsets:             customOverlay.totalToolInsets
             mapName:                "FlightDisplayView"
-            enabled:                !viewer3DWindow.isOpen
         }
 
         FlyViewVideo {
@@ -129,12 +125,11 @@ Item {
             anchors.bottom:         parent.bottom
             anchors.left:           parent.left
             anchors.right:          guidedValueSlider.visible ? guidedValueSlider.left : parent.right
-            z:                      _fullItemZorder + 2 // we need to add one extra layer for map 3d viewer (normally was 1)
+            z:                      _fullItemZorder + 2
             parentToolInsets:       _toolInsets
             mapControl:             _mapControl
             visible:                !QGroundControl.videoManager.fullScreen
             utmspActTrigger:        utmspSendActTrigger
-            isViewer3DOpen:         viewer3DWindow.isOpen
         }
 
         FlyViewCustomLayer {
@@ -172,11 +167,6 @@ Item {
             anchors.bottom:     parent.bottom
             z:                  QGroundControl.zOrderTopMost
             visible:            false
-        }
-
-        Viewer3D{
-            id:                     viewer3DWindow
-            anchors.fill:           parent
         }
     }
 }

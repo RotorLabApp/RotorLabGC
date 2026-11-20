@@ -19,7 +19,6 @@
 #include <QtMultimedia/QVideoSink>
 #include <QtMultimediaQuick/private/qquickvideooutput_p.h>
 #include <QtQuick/QQuickItem>
-#include <QtQuick/QQuickItemGrabResult>
 
 QGC_LOGGING_CATEGORY(QtMultimediaReceiverLog, "qgc.videomanager.videoreceiver.qtmultimedia.qtmultimediareceiver")
 
@@ -67,7 +66,8 @@ QtMultimediaReceiver::QtMultimediaReceiver(QObject *parent)
             break;
         }
 
-        qCDebug(QtMultimediaReceiverLog) << Q_FUNC_INFO << errorString;
+        // G84: the error text can contain the stream URL with its user name and password
+        qCDebug(QtMultimediaReceiverLog) << Q_FUNC_INFO << VideoReceiver::redactedUri(errorString);
     });
 
     // _mediaRecorder->setEncodingMode(QMediaRecorder::EncodingMode::AverageBitRateEncoding);
@@ -89,7 +89,7 @@ QtMultimediaReceiver::QtMultimediaReceiver(QObject *parent)
             break;
         }
 
-        qCDebug(QtMultimediaReceiverLog) << Q_FUNC_INFO << errorString;
+        qCDebug(QtMultimediaReceiverLog) << Q_FUNC_INFO << VideoReceiver::redactedUri(errorString);
     });
 
     _frameTimer.setSingleShot(true);
@@ -115,13 +115,19 @@ void *QtMultimediaReceiver::createVideoSink(QQuickItem *widget, QObject *parent)
 {
     Q_UNUSED(parent);
 
-    QVideoSink *videoSink = nullptr;
-    if (widget) {
-        QQuickVideoOutput *const videoOutput = reinterpret_cast<QQuickVideoOutput*>(widget);
-        videoSink = videoOutput->videoSink();
+    if (!widget) {
+        return nullptr;
     }
 
-    return videoSink;
+    // G83: the widget comes from QML and may be any item (with GStreamer off it is the
+    // GstGLQt6VideoItem stub). Only a real VideoOutput has a video sink.
+    QQuickVideoOutput *const videoOutput = qobject_cast<QQuickVideoOutput*>(widget);
+    if (!videoOutput) {
+        qCCritical(QtMultimediaReceiverLog) << "Video widget" << widget->objectName() << "is a" << widget->metaObject()->className() << "and not a VideoOutput: no video sink";
+        return nullptr;
+    }
+
+    return videoOutput->videoSink();
 }
 
 void QtMultimediaReceiver::releaseVideoSink(void *sink)
@@ -153,6 +159,15 @@ void QtMultimediaReceiver::start(uint32_t timeout)
     if (_uri.isEmpty()) {
         qCDebug(QtMultimediaReceiverLog) << "Failed because URI is not specified";
         emit onStartComplete(STATUS_INVALID_URL);
+        return;
+    }
+
+    // G88: QGC's own schemes for RTP and MPEG-TS over UDP mean nothing to QMediaPlayer. Refuse
+    // them, so VideoManager says video is off (G83) instead of waiting for a picture forever.
+    const QString scheme = _uri.section(QStringLiteral("://"), 0, 0).toLower();
+    if ((scheme == QLatin1String("udp")) || (scheme == QLatin1String("udp265")) || (scheme == QLatin1String("mpegts"))) {
+        qCWarning(QtMultimediaReceiverLog) << "Qt Multimedia cannot play" << VideoReceiver::redactedUri(_uri);
+        emit onStartComplete(STATUS_NOT_IMPLEMENTED);
         return;
     }
     _mediaPlayer->setSource(QUrl::fromUserInput(_uri));
@@ -299,33 +314,11 @@ void QtMultimediaReceiver::stopRecording()
 
 void QtMultimediaReceiver::takeScreenshot(const QString &imageFile)
 {
-    qCDebug(QtMultimediaReceiverLog) << Q_FUNC_INFO;
+    Q_UNUSED(imageFile);
 
-    if (!_videoSink) {
-        qCWarning(QtMultimediaReceiverLog) << "Video Sink is NULL";
-        emit onTakeScreenshotComplete(STATUS_FAIL);
-        return;
-    }
-
-    const QVideoFrame frame = _videoSink->videoFrame();
-    if (!frame.isValid() || !frame.isReadable()) {
-        qCWarning(QtMultimediaReceiverLog) << "Screenshot Frame is Invalid";
-        emit onTakeScreenshotComplete(STATUS_FAIL);
-        return;
-    }
-
-    // const QVideoFrameFormat frameFormat = frame.surfaceFormat();
-    // const QImage frameImage = frame.toImage();
-
-    _videoOutput = reinterpret_cast<QQuickVideoOutput*>(_mediaPlayer->videoOutput());
-    const QSize targetSize = _mediaRecorder->videoResolution();
-    QSharedPointer<QQuickItemGrabResult> screenshot = _videoOutput->grabToImage(targetSize);
-    // (void) connect(&screenshot, &QQuickItemGrabResult::ready, this, [screenshot, imageFile]() {
-        // screenshot->saveToFile(imageFile);
-    // }
-    screenshot->saveToFile(imageFile);
-
-    qCDebug(QtMultimediaReceiverLog) << "Screenshot";
-
+    // G84: screenshots are not supported with Qt Multimedia video. After setVideoSink() the
+    // player's video output is the QVideoSink, not a QML VideoOutput, so the old grab could
+    // never work. Fail cleanly and write no file.
+    qCWarning(QtMultimediaReceiverLog) << "Screenshot is not supported with Qt Multimedia video" << _name;
     emit onTakeScreenshotComplete(STATUS_NOT_IMPLEMENTED);
 }
